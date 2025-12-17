@@ -1,0 +1,65 @@
+/* ================================
+   기본 테마 (Light) — default
+   ================================ */
+:root {
+  /* Base */
+  --bg: #ffffff;
+  --bg-sub: #f6f7f9;
+  --text: #111111;
+  --text-sub: #555555;
+  --border: #e5e7eb;
+
+  /* Primary */
+  --primary: #2f6fff;
+  --primary-hover: #2457d6;
+
+  /* Sidebar */
+  --sidebar-bg: #ffffff;
+  --sidebar-text: #111111;
+  --sidebar-text-sub: #6b7280;
+  --sidebar-link: #374151;
+  --sidebar-link-active-bg: #2f6fff;
+  --sidebar-link-active-text: #ffffff;
+  --sidebar-link-hover-bg: #eef2ff;
+  --sidebar-border: #e5e7eb;
+
+  /* Tabs (IP Manager) */
+  --tab-bg: #eef0f3;
+  --tab-bg-active: #2f6fff;
+  --tab-text: #222222;
+  --tab-text-active: #ffffff;
+  --tab-border: #e5e7eb;
+}
+
+/* ================================
+   Dark mode
+   ================================ */
+[data-theme="dark"] {
+  /* Base */
+  --bg: #0f1115;
+  --bg-sub: #1a1d23;
+  --text: #f1f1f1;
+  --text-sub: #a1a1aa;
+  --border: #2a2d35;
+
+  /* Primary */
+  --primary: #4f7dff;
+  --primary-hover: #3a66e0;
+
+  /* Sidebar */
+  --sidebar-bg: #0f1115;
+  --sidebar-text: #f1f1f1;
+  --sidebar-text-sub: #9ca3af;
+  --sidebar-link: #d1d5db;
+  --sidebar-link-active-bg: #2f6fff;
+  --sidebar-link-active-text: #ffffff;
+  --sidebar-link-hover-bg: #1a1d23;
+  --sidebar-border: #1f2937;
+
+  /* Tabs (IP Manager) */
+  --tab-bg: #1a1d23;
+  --tab-bg-active: #2f6fff;
+  --tab-text: #e5e7eb;
+  --tab-text-active: #ffffff;
+  --tab-border: #2a2d35;
+}
