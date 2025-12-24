@@ -1,0 +1,2 @@
+echo ".env" >> backend/.gitignore
+echo "__pycache__/" >> backend/.gitignore
