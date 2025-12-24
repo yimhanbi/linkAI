@@ -1,4 +1,3 @@
-import React from 'react';
 import { Form, Input, Button, Card, Table, Tag, Space, Typography } from 'antd';
 import { SearchOutlined, ReloadOutlined } from '@ant-design/icons';
 
