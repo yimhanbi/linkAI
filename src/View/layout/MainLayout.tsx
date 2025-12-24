@@ -11,14 +11,13 @@ export default function MainLayout() {
       style={{
         display: "flex",
         minHeight: "100vh",
-        background: "var(--bg)",
+        background: "var(--bg)", // 테마에 맞는 배경색 적용 중
         color: "var(--text)",
       }}
     >
       <Sidebar />
 
       <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-        {/* Topbar */}
         <header
           style={{
             position: "sticky",
@@ -33,6 +32,7 @@ export default function MainLayout() {
             background: "var(--bg)",
           }}
         >
+          {/* 버튼 클릭 시 Context가 바뀌고 -> App.tsx의 ConfigProvider가 감지해서 antd를 바꿉니다 */}
           <button
             onClick={toggleTheme}
             style={{
@@ -50,6 +50,7 @@ export default function MainLayout() {
         </header>
 
         <main style={{ flex: 1, padding: 24 }}>
+          {/* 상세 검색 페이지가 여기에 렌더링됩니다 */}
           <Outlet />
         </main>
       </div>
