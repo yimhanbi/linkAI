@@ -1,8 +1,12 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
-from backend.database import db_manager
+from elasticsearch import AsyncElasticsearch
+import os
 
 router = APIRouter(prefix="/api/patents", tags=["특허 API"])
+
+# Elasticsearch 클라이언트 설정
+es = AsyncElasticsearch("http://127.0.0.1:9200")
 
 @router.get("/")
 async def get_patents(
@@ -14,61 +18,71 @@ async def get_patents(
     page: int = 1, 
     limit: int = 10
 ):
-    # 1. 필터 리스트 생성 (각 조건이 있을 때만 리스트에 추가)
-    filters = []
-    
-    # 기술 키워드 (제목 또는 요약)
-    if tech_q:
-        filters.append({"$or": [
-            {"title.ko": {"$regex": tech_q, "$options": "i"}},
-            {"abstract": {"$regex": tech_q, "$options": "i"}}
-        ]})
-        
-    # 제품 키워드 (제목 또는 요약)
-    if prod_q:
-        filters.append({"$or": [
-            {"title.ko": {"$regex": prod_q, "$options": "i"}},
-            {"abstract": {"$regex": prod_q, "$options": "i"}}
-        ]})
-
-    # 책임연구자 (발명자 리스트 안의 name 필드 검색)
-    if inventor:
-        filters.append({"inventors.name": {"$regex": inventor, "$options": "i"}})
-        
-    # 연구자 소속 (출원인 이름 검색)
-    if applicant:
-        filters.append({"applicant.name": {"$regex": applicant, "$options": "i"}})
-        
-    # 출원번호
-    if app_num:
-        filters.append({"applicationNumber": {"$regex": app_num}})
-
-    # 2. 최종 쿼리 조립 ($and를 사용하여 모든 조건 만족시키기)
-    query = {"$and": filters} if filters else {}
-
-    # 3. DB 조회 및 데이터 정제
     try:
         skip = (page - 1) * limit
-        
-        # MongoDB에서 데이터 가져오기 (_id는 제외)
-        cursor = db_manager.db.patents.find(query, {"_id": 0}).skip(skip).limit(limit)
-        patents = await cursor.to_list(length=limit)
-        
-        # JSON 변환 에러 방지: rawRef(ObjectId)를 문자열로 변환
-        for patent in patents:
-            if "rawRef" in patent and patent["rawRef"]:
-                patent["rawRef"] = str(patent["rawRef"])
-        
-        # 전체 데이터 개수 카운트
-        total = await db_manager.db.patents.count_documents(query)
-        
+        must_queries = []
+
+        # 기술 키워드 검색
+        if tech_q:
+            must_queries.append({
+                "multi_match": {
+                    "query": tech_q,
+                    "fields": ["title.ko^2", "abstract"],
+                    "fuzziness": "AUTO"
+                }
+            })
+
+        # 제품 키워드 검색
+        if prod_q:
+            must_queries.append({
+                "multi_match": {
+                    "query": prod_q,
+                    "fields": ["title.ko", "abstract"]
+                }
+            })
+
+        # 발명자, 출원인, 출원번호 검색
+        if inventor:
+            must_queries.append({"match": {"inventors.name": inventor}})
+        if applicant:
+            must_queries.append({"match": {"applicant.name": applicant}})
+        if app_num:
+            must_queries.append({"match": {"applicationNumber": app_num}})
+
+        # 쿼리 조합
+        if must_queries:
+            search_query = {"bool": {"must":must_queries}}
+
+        else:
+            search_query = {"match_all": {}}
+
+        # Elasticsearch 실행
+        response = await es.search(
+            index="patents",
+            query=search_query,
+            from_=skip,
+            size=limit,
+            sort=[{"_score": "desc"}]
+        )
+
+        hits = response['hits']['hits']
+        patents = [hit['_source'] for hit in hits]
+        total = response['hits']['total']['value']
+
         return {
-            "total": total, 
-            "page": page, 
-            "limit": limit, 
-            "data": patents
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "data": patents,
+            "engine": "elasticsearch"
         }
+
     except Exception as e:
-        # 서버 콘솔에 에러 출력
-        print(f"❌ API 실행 에러: {e}")
-        raise HTTPException(status_code=500, detail="서버 내부 데이터 처리 오류가 발생했습니다.")
+        print(f"❌ 검색 에러 발생: {e}")
+        # 에러 발생 시 500 에러 반환
+        raise HTTPException(status_code=500, detail=str(e))
+
+# 서버 종료 시 연결 닫기
+@router.on_event("shutdown")
+async def shutdown_event():
+    await es.close()
