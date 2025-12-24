@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Layout, Menu } from 'antd';
 import { NavLink, useLocation } from 'react-router-dom';
 import styled from 'styled-components';
