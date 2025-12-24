@@ -5,7 +5,6 @@ import styled from 'styled-components';
 // 사용할 아이콘들 import
 import {
   SearchOutlined,
-  CalendarOutlined,
   UserOutlined,
   SettingOutlined,
   MenuOutlined, 
@@ -123,17 +122,10 @@ export default function Sidebar() {
       <Menu
         mode="inline"
         selectedKeys={[location.pathname]}
-        defaultOpenKeys={['ip-manager']}
       >
         <Menu.Item key="/advanced-search" icon={<SearchOutlined />}>
           <NavLink to="/advanced-search">Advanced Search</NavLink>
         </Menu.Item>
-
-        <Menu.SubMenu key="ip-manager" icon={<CalendarOutlined />} title="IP Manager">
-          <Menu.Item key="/ip-manager/calendar">
-            <NavLink to="/ip-manager/calendar">Calendar</NavLink>
-          </Menu.Item>
-        </Menu.SubMenu>
 
         {!collapsed && <SectionLabel>MANAGEMENT</SectionLabel>}
 
