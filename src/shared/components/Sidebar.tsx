@@ -63,14 +63,8 @@ const HeaderArea = styled.div<{ collapsed: boolean }>`
   display: flex;
   align-items: center;
   padding: 0 20px;
-  justify-content: ${props => props.collapsed ? 'center' : 'space-between'};
+  justify-content: ${props => props.collapsed ? 'center' : 'flex-end'};
   color: var(--sidebar-text);
-
-  .logo-text {
-    font-weight: 800;
-    font-size: 18px;
-    display: ${props => props.collapsed ? 'none' : 'block'};
-  }
 
   /* 햄버거 아이콘 스타일 */
   .toggle-icon {
@@ -107,10 +101,7 @@ export default function Sidebar() {
       collapsedWidth={80}
     >
       <HeaderArea collapsed={collapsed}>
-        <span className="logo-text">moaai</span>
-        
         {/*  Ant Design의 MenuOutlined 아이콘 사용 */}
-
         <MenuOutlined 
           className="toggle-icon" 
           onClick={() => setCollapsed(!collapsed)} 

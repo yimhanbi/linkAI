@@ -26,12 +26,21 @@ export default function MainLayout() {
             height: 56,
             display: "flex",
             alignItems: "center",
-            justifyContent: "flex-end",
+            justifyContent: "space-between",
             padding: "0 16px",
             borderBottom: "1px solid var(--border)",
             background: "var(--bg)",
           }}
         >
+          <span
+            style={{
+              fontWeight: 800,
+              fontSize: 18,
+              color: "#1890ff",
+            }}
+          >
+            LinkAI
+          </span>
           {/* 버튼 클릭 시 Context가 바뀌고 -> App.tsx의 ConfigProvider가 감지해서 antd를 바꿉니다 */}
           <button
             onClick={toggleTheme}
