@@ -6,7 +6,12 @@ import os
 router = APIRouter(prefix="/api/patents", tags=["특허 API"])
 
 # Elasticsearch 클라이언트 설정
-es = AsyncElasticsearch("http://127.0.0.1:9200")
+es = AsyncElasticsearch(
+    "http://127.0.0.1:9200",
+    verify_certs=False,
+    ssl_show_warn=False,
+    request_timeout=30
+    )
 
 @router.get("/")
 async def get_patents(
