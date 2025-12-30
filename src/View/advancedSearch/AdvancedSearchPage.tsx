@@ -1,8 +1,10 @@
-import { Form, Input, Button, Card, Table, Tag, Space, Typography, Tabs, message } from 'antd';
+import { Form, Input, Button, Card, Table, Tag, Space, Typography, Tabs, message, Skeleton } from 'antd';
 import { SearchOutlined, ReloadOutlined, DownloadOutlined } from '@ant-design/icons';
 import { useState, useContext, useMemo } from 'react';
 import { ThemeContext } from '../../shared/theme/ThemeContext';
-import { fetchPatents } from '/Users/imhanbi/dev/linkai/src/Service/patentService.ts'; // 실제 API 서비스 함수
+import PatentDetailModal from './PatentDetailModal';
+import PatentPdfModal from './PatentPdfModal';
+import { fetchPatents } from '../../Service/ip/patentService';
 
 const { Title, Text } = Typography;
 
@@ -17,32 +19,121 @@ export default function AdvancedSearchPage() {
   const [stats, setStats] = useState({                    // 통계 수치
     total: 0, KR: 0, US: 0, EP: 0, JP: 0, CN: 0, PCT: 0, etc: 0
   });
+  const [currentPage, setCurrentPage] = useState(1);      // 현재 페이지
+  const [pageSize, setPageSize] = useState(10);          // 페이지당 항목 수
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]); // 선택된 행의 키
+  const [selectedRows, setSelectedRows] = useState<any[]>([]); // 선택된 행 데이터
+
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [isPdfOpen, setIsPdfOpen] = useState(false);
+  const [currentPatent, setCurrentPatent] = useState<any | null>(null);
 
   //  탭에 따른 데이터 필터링 로직
   const filteredData = useMemo(() => {
-    if (activeTab === 'all') return dataSource;
-    if (activeTab === 'kr') return dataSource.filter(item => item.country === 'KR');
-    if (activeTab === 'overseas') return dataSource.filter(item => item.country !== 'KR');
-    return dataSource;
+    let data = dataSource;
+    if (activeTab === 'kr') {
+      data = dataSource.filter(item => item.country === 'KR');
+    } else if (activeTab === 'overseas') {
+      data = dataSource.filter(item => item.country !== 'KR');
+    }
+    return data;
   }, [dataSource, activeTab]);
+
+  // 페이지네이션을 위한 데이터 슬라이싱
+  const paginatedData = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    return filteredData.slice(startIndex, endIndex);
+  }, [filteredData, currentPage, pageSize]);
 
   const onReset = () => {
     form.resetFields();
     setDataSource([]);
     setStats({ total: 0, KR: 0, US: 0, EP: 0, JP: 0, CN: 0, PCT: 0, etc: 0 });
+    setSelectedRowKeys([]);
+    setSelectedRows([]);
     message.info('검색 조건이 초기화되었습니다.');
   };
 
+  // AND/OR 연산자 추가 함수
+  const handleOperator = (fieldName: string, operator: 'AND' | 'OR') => {
+    const currentValue = form.getFieldValue(fieldName) || '';
+    const trimmedValue = currentValue.trim();
+    
+    // 현재 값이 있고 마지막이 공백이 아니면 공백 추가
+    const newValue = trimmedValue 
+      ? (trimmedValue.endsWith(' AND') || trimmedValue.endsWith(' OR') 
+          ? trimmedValue + ` ${operator} ` 
+          : trimmedValue + ` ${operator} `)
+      : '';
+    
+    form.setFieldsValue({ [fieldName]: newValue });
+    
+    // 입력 필드에 포커스
+    setTimeout(() => {
+      const inputElement = document.querySelector(`input[name="${fieldName}"]`) as HTMLInputElement;
+      if (inputElement) {
+        inputElement.focus();
+        // 커서를 끝으로 이동
+        inputElement.setSelectionRange(inputElement.value.length, inputElement.value.length);
+      }
+    }, 0);
+  };
+
   // 2. 다운로드 버튼 핸들러
-  const handleDownload = () => {
-    if (filteredData.length === 0) {
-      message.warning('다운로드할 데이터가 없습니다.');
+  const handleDownload = async () => {
+    if (selectedRows.length === 0) {
+      message.warning('다운로드할 특허를 선택해주세요.');
       return;
     }
-    console.log('다운로드 데이터:', filteredData);
-    message.loading('엑셀 파일 생성 중...', 1.5).then(() => {
-      message.success('다운로드가 완료되었습니다.');
-    });
+
+    try {
+      // xlsx를 동적으로 import
+      const XLSX = await import('xlsx');
+
+      // 선택된 행 데이터를 엑셀 형식으로 변환
+      const excelData = selectedRows.map((item, index) => ({
+        'NO': index + 1,
+        '국가': item.country || 'KR',
+        '상태': item.status || '공개',
+        '출원번호': item.appNo || '',
+        '출원일': item.appDate || '',
+        '발명의 명칭': item.title || '',
+        '책임연구자': item.inventor || '',
+        '소속': item.affiliation || ''
+      }));
+
+      // 워크시트 생성
+      const worksheet = XLSX.utils.json_to_sheet(excelData);
+      
+      // 컬럼 너비 설정
+      const columnWidths = [
+        { wch: 5 },   // NO
+        { wch: 8 },   // 국가
+        { wch: 10 },  // 상태
+        { wch: 18 },  // 출원번호
+        { wch: 12 },  // 출원일
+        { wch: 50 },  // 발명의 명칭
+        { wch: 15 },  // 책임연구자
+        { wch: 30 }   // 소속
+      ];
+      worksheet['!cols'] = columnWidths;
+
+      // 워크북 생성
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, '특허리스트');
+
+      // 파일명 생성 (현재 날짜 포함)
+      const fileName = `특허검색결과_${new Date().toLocaleDateString('ko-KR').replace(/\//g, '-')}.xlsx`;
+
+      // 파일 다운로드
+      XLSX.writeFile(workbook, fileName);
+      
+      message.success(`${selectedRows.length}건의 특허 정보가 다운로드되었습니다.`);
+    } catch (error) {
+      console.error('엑셀 다운로드 실패:', error);
+      message.error('엑셀 파일 생성 중 오류가 발생했습니다.');
+    }
   };
 
   // 3. 테이블 컬럼 정의
@@ -61,29 +152,71 @@ export default function AdvancedSearchPage() {
         </Tag>
       )
     },
-    { title: '출원번호', dataIndex: 'appNo', key: 'appNo', width: 150, render: (text: string) => <a style={{ color: '#1890ff' }}>{text}</a> },
+    {
+      title: '출원번호',
+      dataIndex: 'appNo',
+      key: 'appNo',
+      width: 150,
+      render: (_text: string, record: any) => (
+        <button
+          type="button"
+          style={{ color: '#1890ff', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+          onClick={() => handleShowDetail(record)}
+        >
+          {record.appNo}
+        </button>
+      )
+    },
     { title: '출원일', dataIndex: 'appDate', key: 'appDate', width: 120 },
     {
       title: '발명의 명칭',
       dataIndex: 'title',
       key: 'title',
-      render: (text: string) => <b style={{ cursor: 'pointer' }}>{text}</b>
+      render: (_text: string, record: any) => (
+        <span
+          style={{ cursor: 'pointer', fontWeight: 600 }}
+          onClick={() => handleShowDetail(record)}
+        >
+          {record.title}
+        </span>
+      )
     },
     { title: '책임연구자', dataIndex: 'inventor', key: 'inventor', width: 120, align: 'center' as const },
     { title: '소속', dataIndex: 'affiliation', key: 'affiliation', width: 150 },
   ];
 
+  const handleShowDetail = (record: any) => {
+    setCurrentPatent(record);
+    setIsDetailOpen(true);
+  };
+
+  const handleCloseDetail = () => {
+    setIsDetailOpen(false);
+  };
+
+  const handleOpenPdf = () => {
+    setIsPdfOpen(true);
+  };
+
+  const handleClosePdf = () => {
+    setIsPdfOpen(false);
+  };
+
   // 4. 검색 실행 함수
   const onFinish = async (values: any) => {
     setLoading(true);
+    setCurrentPage(1); // 검색 시 첫 페이지로 리셋
     try {
       //API 호출 (파라미터명은 백엔드의 tech_q, prod_q 등에 맞춰 전달)
+      // limit을 크게 설정하여 전체 데이터를 가져옴 (또는 서버 사이드 페이지네이션 구현)
       const response = await fetchPatents({
-        tech_q: values. techKw,
-        prod_q: values. prodKw,
+        tech_q: values.techKw,
+        prod_q: values.prodKw,
         inventor: values.inventor,
         applicant: values.affiliation,
-        app_num: values.appNo
+        app_num: values.appNo,
+        page: 1,
+        limit: 10000 // 전체 데이터를 가져오기 위해 큰 값 설정
       }); 
 
       //  데이터 매핑 (백엔드 필드명을 UI 컬럼명으로 변환)
@@ -151,19 +284,111 @@ export default function AdvancedSearchPage() {
           wrapperCol={{ span: 21 }}
         >
           <Form.Item name="techKw" label={<b>기술 키워드</b>}>
-            <Input size="large" placeholder="예: AI OR 인공지능 AND 학습" suffix={<Space><Button size="small" type="text">AND</Button>| <Button size="small" type="text">OR</Button></Space>} />
+            <Input 
+              size="large" 
+              placeholder="예: AI OR 인공지능 AND 학습" 
+              suffix={
+                <Space split={<span style={{ color: '#ddd', margin: '0 4px' }}>|</span>}>
+                  <Button 
+                    size="small" 
+                    type="text" 
+                    onClick={() => handleOperator('techKw', 'AND')}
+                    style={{ padding: '0 8px', height: '24px', fontSize: '12px', fontWeight: 'bold' }}
+                  >
+                    AND
+                  </Button>
+                  <Button 
+                    size="small" 
+                    type="text" 
+                    onClick={() => handleOperator('techKw', 'OR')}
+                    style={{ padding: '0 8px', height: '24px', fontSize: '12px', fontWeight: 'bold' }}
+                  >
+                    OR
+                  </Button>
+                </Space>
+              } 
+            />
           </Form.Item>
 
           <Form.Item name="prodKw" label={<b>제품 키워드</b>}>
-            <Input size="large" placeholder="예: 자율주행차 OR 로봇" suffix={<Space><Button size="small" type="text">AND</Button>| <Button size="small" type="text">OR</Button></Space>} />
+            <Input 
+              size="large" 
+              placeholder="예: 자율주행차 OR 로봇" 
+              suffix={
+                <Space split={<span style={{ color: '#ddd', margin: '0 4px' }}>|</span>}>
+                  <Button 
+                    size="small" 
+                    type="text" 
+                    onClick={() => handleOperator('prodKw', 'AND')}
+                    style={{ padding: '0 8px', height: '24px', fontSize: '12px', fontWeight: 'bold' }}
+                  >
+                    AND
+                  </Button>
+                  <Button 
+                    size="small" 
+                    type="text" 
+                    onClick={() => handleOperator('prodKw', 'OR')}
+                    style={{ padding: '0 8px', height: '24px', fontSize: '12px', fontWeight: 'bold' }}
+                  >
+                    OR
+                  </Button>
+                </Space>
+              } 
+            />
           </Form.Item>
 
           <Form.Item name="inventor" label={<b>책임연구자</b>}>
-            <Input size="large" placeholder="예: 김철수 OR 이영희" />
+            <Input 
+              size="large" 
+              placeholder="예: 김철수 OR 이영희" 
+              suffix={
+                <Space split={<span style={{ color: '#ddd', margin: '0 4px' }}>|</span>}>
+                  <Button 
+                    size="small" 
+                    type="text" 
+                    onClick={() => handleOperator('inventor', 'AND')}
+                    style={{ padding: '0 8px', height: '24px', fontSize: '12px', fontWeight: 'bold' }}
+                  >
+                    AND
+                  </Button>
+                  <Button 
+                    size="small" 
+                    type="text" 
+                    onClick={() => handleOperator('inventor', 'OR')}
+                    style={{ padding: '0 8px', height: '24px', fontSize: '12px', fontWeight: 'bold' }}
+                  >
+                    OR
+                  </Button>
+                </Space>
+              } 
+            />
           </Form.Item>
 
           <Form.Item name="affiliation" label={<b>연구자 소속</b>}>
-            <Input size="large" placeholder="예: 전자공학과 OR 첨단융합대학" />
+            <Input 
+              size="large" 
+              placeholder="예: 전자공학과 OR 첨단융합대학" 
+              suffix={
+                <Space split={<span style={{ color: '#ddd', margin: '0 4px' }}>|</span>}>
+                  <Button 
+                    size="small" 
+                    type="text" 
+                    onClick={() => handleOperator('affiliation', 'AND')}
+                    style={{ padding: '0 8px', height: '24px', fontSize: '12px', fontWeight: 'bold' }}
+                  >
+                    AND
+                  </Button>
+                  <Button 
+                    size="small" 
+                    type="text" 
+                    onClick={() => handleOperator('affiliation', 'OR')}
+                    style={{ padding: '0 8px', height: '24px', fontSize: '12px', fontWeight: 'bold' }}
+                  >
+                    OR
+                  </Button>
+                </Space>
+              } 
+            />
           </Form.Item>
 
           <div style={{ display: 'flex', gap: '24px' }}>
@@ -217,29 +442,62 @@ export default function AdvancedSearchPage() {
         <Button
           icon={<DownloadOutlined />}
           onClick={handleDownload}
-          disabled={filteredData.length === 0}
+          disabled={selectedRows.length === 0}
           style={{ marginBottom: 8 }}
         >
-          다운로드
+          다운로드 ({selectedRows.length})
         </Button>
       </div>
 
       {/* 통계 바 및 테이블 영역 */}
       <StatisticsBar />
 
-      <Table
-        dataSource={filteredData}
-        columns={columns}
-        loading={loading}
-        bordered
-        size="middle"
-        pagination={{ 
-          pageSize: 10, 
-          showSizeChanger: true, 
-          position: ['bottomCenter'],
-          showTotal: (total) => `총 ${total}건`
-        }}
-        style={{ borderRadius: 8, overflow: 'hidden' }}
+      {loading ? (
+        <Card style={{ borderRadius: 8, padding: '24px' }}>
+          <Skeleton active paragraph={{ rows: 10 }} />
+        </Card>
+      ) : (
+        <Table
+          rowSelection={{
+            selectedRowKeys,
+            onChange: (keys, rows) => {
+              setSelectedRowKeys(keys);
+              setSelectedRows(rows);
+            },
+          }}
+          dataSource={paginatedData}
+          columns={columns}
+          bordered
+          size="middle"
+          pagination={{ 
+            current: currentPage,
+            pageSize: pageSize,
+            total: filteredData.length,
+            showSizeChanger: true,
+            pageSizeOptions: ['10', '20', '50', '100'],
+            showTotal: (total) => `총 ${total}건`,
+            position: ['bottomCenter'],
+            onChange: (page) => setCurrentPage(page),
+            onShowSizeChange: (_current, size) => {
+              setPageSize(size);
+              setCurrentPage(1); // 페이지 사이즈 변경 시 첫 페이지로
+            }
+          }}
+          style={{ borderRadius: 8, overflow: 'hidden' }}
+        />
+      )}
+
+      <PatentDetailModal
+        isOpen={isDetailOpen}
+        onClose={handleCloseDetail}
+        data={currentPatent}
+        onPdfOpen={handleOpenPdf}
+      />
+
+      <PatentPdfModal
+        isOpen={isPdfOpen}
+        onClose={handleClosePdf}
+        appNo={currentPatent?.appNo}
       />
     </div>
   );
