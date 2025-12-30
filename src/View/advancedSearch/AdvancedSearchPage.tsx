@@ -1,4 +1,4 @@
-import { Form, Input, Button, Card, Table, Tag, Space, Typography, Tabs, message, Skeleton } from 'antd';
+import { Form, Input, Button, Card, Table, Tag, Space, Typography, Tabs, message, Skeleton, theme } from 'antd';
 import { SearchOutlined, ReloadOutlined, DownloadOutlined } from '@ant-design/icons';
 import { useState, useContext, useMemo } from 'react';
 import { ThemeContext } from '../../shared/theme/ThemeContext';
@@ -11,7 +11,8 @@ const { Title, Text } = Typography;
 
 export default function AdvancedSearchPage() {
   const [form] = Form.useForm();
-  const { theme } = useContext(ThemeContext);
+  const { theme: appTheme } = useContext(ThemeContext);
+  const { token } = theme.useToken();
 
   // --- 상태 관리 ---
   const [dataSource, setDataSource] = useState<any[]>([]); 
@@ -133,7 +134,7 @@ export default function AdvancedSearchPage() {
     } catch (e) { message.error('다운로드 중 오류 발생'); }
   };
 
-  const columns = [
+  const columns = useMemo(() => [
     { title: 'NO', dataIndex: 'key', width: 60, align: 'center' as const },
     { title: '국가', dataIndex: 'country', width: 80, align: 'center' as const },
     {
@@ -142,29 +143,50 @@ export default function AdvancedSearchPage() {
     },
     {
       title: '출원번호', dataIndex: 'appNo', width: 150, align: 'center' as const,
-      render: (text: string, record: any) => <a onClick={() => { setCurrentPatent(record); setIsDetailOpen(true); }}>{text}</a>
+      render: (text: string, record: any) => (
+        <a style={{ color: token.colorLink }} onClick={() => { setCurrentPatent(record); setIsDetailOpen(true); }}>
+          {text}
+        </a>
+      )
     },
     { title: '출원일', dataIndex: 'appDate', width: 120, align: 'center' as const },
     {
       title: '발명의 명칭', dataIndex: 'title', align: 'center' as const,
-      render: (text: string, record: any) => <b style={{ cursor: 'pointer' }} onClick={() => { setCurrentPatent(record); setIsDetailOpen(true); }}>{text}</b>
+      render: (text: string, record: any) => (
+        <b style={{ cursor: 'pointer', color: token.colorText }} onClick={() => { setCurrentPatent(record); setIsDetailOpen(true); }}>
+          {text}
+        </b>
+      )
     },
     { title: '책임연구자', dataIndex: 'inventor', width: 120, align: 'center' as const },
     { title: '소속', dataIndex: 'affiliation', width: 250, align: 'center' as const },
-  ];
+  ], [token.colorText, token.colorLink]);
+
+  // 출원번호/등록번호 필드 배경색 (다크 모드 대응)
+  // 다크 모드에서는 더 밝은 회색으로, 라이트 모드에서는 연한 회색으로 설정
+  const numberInputBg = appTheme === 'dark' 
+    ? '#3a3d45'  // 다크 모드: 약간 밝은 회색 (텍스트가 잘 보이도록)
+    : '#f5f5f5'; // 라이트 모드: 연한 회색
 
   return (
-    <div style={{ maxWidth: 1400, margin: '0 auto', padding: '24px' }}>
+    <div style={{ maxWidth: 1400, margin: '0 auto', padding: token.paddingLG }}>
       <Title level={3}>특허 검색</Title>
 
-      <Card bordered={false} style={{ marginBottom: 32, borderRadius: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+      <Card 
+        bordered={false} 
+        style={{ 
+          marginBottom: token.marginLG * 2, 
+          borderRadius: token.borderRadiusLG, 
+          boxShadow: token.boxShadow 
+        }}
+      >
         <Form form={form} layout="horizontal" onFinish={onFinish} labelCol={{ span: 3 }} wrapperCol={{ span: 21 }}>
           <Form.Item name="techKw" label={<b>기술 키워드</b>}>
             <Input 
               size="large" 
               placeholder="예: AI OR 인공지능 AND 학습 (특허 원문 + AI 기술분석 검색)"
               suffix={
-                <Space split={<span style={{ color: '#ddd' }}>|</span>}>
+                <Space split={<span style={{ color: token.colorTextTertiary }}>|</span>}>
                   <Button size="small" type="text" onClick={() => handleOperator('techKw', 'AND')}>AND</Button>
                   <Button size="small" type="text" onClick={() => handleOperator('techKw', 'OR')}>OR</Button>
                 </Space>
@@ -176,7 +198,7 @@ export default function AdvancedSearchPage() {
               size="large" 
               placeholder="예: 자율주행차 OR 로봇 (AI 적용제품 분석 검색)"
               suffix={
-                <Space split={<span style={{ color: '#ddd' }}>|</span>}>
+                <Space split={<span style={{ color: token.colorTextTertiary }}>|</span>}>
                   <Button size="small" type="text" onClick={() => handleOperator('prodKw', 'AND')}>AND</Button>
                   <Button size="small" type="text" onClick={() => handleOperator('prodKw', 'OR')}>OR</Button>
                 </Space>
@@ -188,7 +210,7 @@ export default function AdvancedSearchPage() {
               size="large" 
               placeholder="예: 홍길동 OR 홍길순"
               suffix={
-                <Space split={<span style={{ color: '#ddd' }}>|</span>}>
+                <Space split={<span style={{ color: token.colorTextTertiary }}>|</span>}>
                   <Button size="small" type="text" onClick={() => handleOperator('inventor', 'AND')}>AND</Button>
                   <Button size="small" type="text" onClick={() => handleOperator('inventor', 'OR')}>OR</Button>
                 </Space>
@@ -200,7 +222,7 @@ export default function AdvancedSearchPage() {
               size="large" 
               placeholder="예: 전자공학과 OR 첨단융합대학"
               suffix={
-                <Space split={<span style={{ color: '#ddd' }}>|</span>}>
+                <Space split={<span style={{ color: token.colorTextTertiary }}>|</span>}>
                   <Button size="small" type="text" onClick={() => handleOperator('affiliation', 'AND')}>AND</Button>
                   <Button size="small" type="text" onClick={() => handleOperator('affiliation', 'OR')}>OR</Button>
                 </Space>
@@ -208,38 +230,92 @@ export default function AdvancedSearchPage() {
             />
           </Form.Item>
 
-          <div style={{ display: 'flex', gap: '24px' }}>
+          <div style={{ display: 'flex', gap: token.marginLG }}>
             <Form.Item name="appNo" label={<b>출원번호</b>} style={{ flex: 1 }} labelCol={{ span: 6 }}>
               <Input 
                 size="large" 
                 placeholder="예: 10-2020-0000220"
-                style={{ backgroundColor: '#f5f5f5' }}
+                style={{ 
+                  backgroundColor: numberInputBg,
+                  color: token.colorText
+                }}
               />
             </Form.Item>
             <Form.Item name="regNo" label={<b>등록번호</b>} style={{ flex: 1 }} labelCol={{ span: 6 }}>
               <Input 
                 size="large" 
                 placeholder="예: 10-0000220"
-                style={{ backgroundColor: '#f5f5f5' }}
+                style={{ 
+                  backgroundColor: numberInputBg,
+                  color: token.colorText
+                }}
               />
             </Form.Item>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, borderTop: '1px solid #f0f0f0', paddingTop: 24, marginTop: 16 }}>
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'flex-end', 
+            gap: token.marginSM, 
+            borderTop: `1px solid ${token.colorSplit}`, 
+            paddingTop: token.paddingLG, 
+            marginTop: token.marginMD 
+          }}>
             <Button icon={<ReloadOutlined />} onClick={onReset} size="large">초기화</Button>
-            <Button size="large" style={{ backgroundColor: '#546e7a', borderColor: '#546e7a', color: '#fff' }} onClick={() => setIsAdvModalOpen(true)}>상세 검색</Button>
-            <Button type="primary" icon={<SearchOutlined />} htmlType="submit" size="large" loading={loading} style={{ padding: '0 40px' }}>검색하기</Button>
+            <Button 
+              size="large" 
+              style={{ 
+                backgroundColor: '#546e7a', 
+                borderColor: '#546e7a', 
+                color: '#fff' 
+              }} 
+              onClick={() => setIsAdvModalOpen(true)}
+            >
+              상세 검색
+            </Button>
+            <Button 
+              type="primary" 
+              icon={<SearchOutlined />} 
+              htmlType="submit" 
+              size="large" 
+              loading={loading} 
+              style={{ padding: `0 ${token.paddingXL * 2}` }}
+            >
+              검색하기
+            </Button>
           </div>
         </Form>
       </Card>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 16, borderBottom: '1px solid #f0f0f0' }}>
-        <Tabs activeKey={activeTab} onChange={setActiveTab} items={[{ label: '전체특허', key: 'all' }, { label: '국내특허', key: 'kr' }, { label: '해외특허', key: 'overseas' }]} style={{ marginBottom: -1 }} />
-        <Button icon={<DownloadOutlined />} onClick={handleDownload} disabled={selectedRows.length === 0} style={{ marginBottom: 8 }}>다운로드 ({selectedRows.length})</Button>
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'flex-end', 
+        marginBottom: token.marginMD, 
+        borderBottom: `1px solid ${token.colorSplit}` 
+      }}>
+        <Tabs 
+          activeKey={activeTab} 
+          onChange={setActiveTab} 
+          items={[
+            { label: '전체특허', key: 'all' }, 
+            { label: '국내특허', key: 'kr' }, 
+            { label: '해외특허', key: 'overseas' }
+          ]} 
+          style={{ marginBottom: -1 }} 
+        />
+        <Button 
+          icon={<DownloadOutlined />} 
+          onClick={handleDownload} 
+          disabled={selectedRows.length === 0} 
+          style={{ marginBottom: token.marginXS }}
+        >
+          다운로드 ({selectedRows.length})
+        </Button>
       </div>
 
-      <Space size="large" style={{ marginBottom: 16 }}>
-        <Text>결과 <b style={{ color: '#1890ff' }}>{filteredData.length.toLocaleString()}</b> 건</Text>
+      <Space size="large" style={{ marginBottom: token.marginMD }}>
+        <Text>결과 <b style={{ color: token.colorPrimary }}>{filteredData.length.toLocaleString()}</b> 건</Text>
       </Space>
 
       {loading ? <Skeleton active paragraph={{ rows: 10 }} /> : (
