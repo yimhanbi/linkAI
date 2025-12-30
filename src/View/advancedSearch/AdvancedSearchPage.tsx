@@ -47,49 +47,83 @@ export default function AdvancedSearchPage() {
     return filteredData.slice(startIndex, startIndex + pageSize);
   }, [filteredData, currentPage, pageSize]);
 
-  // --- 검색 실행 로직 (핵심) ---
+  // --- 검색 실행 로직  ---
   const onFinish = async (values: any) => {
     setLoading(true);
     setCurrentPage(1); 
     try {
-      // 상세 검색 모달과 메인 폼의 데이터를 통합하여 API 파라미터 구성
-      const params: any = {
-        tech_q: values.techKw || values.title || "",  // 키워드 혹은 발명의 명칭
-        prod_q: values.prodKw || values.description || "", // 제품 키워드 혹은 명세서
-        inventor: values.inventor || values.responsible || "", // 연구자
-        applicant: values.affiliation || "",
-        app_num: values.appNo || "",
-        reg_num: values.regNo || "",
-        // 날짜 데이터가 존재할 경우 포맷팅
-        start_date: values.appDateRange?.[0]?.format('YYYY-MM-DD'),
-        end_date: values.appDateRange?.[1]?.format('YYYY-MM-DD'),
-        page: 1,
-        limit: 10000 
+      const cleanParams: any = {};
+      
+      const mapping: Record<string, string> = {
+        // 상세 검색 모달 필드 (우선순위 높음)
+        title: 'tech_q',
+        description: 'desc_q',
+        claims: 'claim_q',
+        inventors: 'inventor',
+        responsible: 'manager',
+        affiliation: 'applicant',
+        appNo: 'app_num',
+        regNo: 'reg_num',
+        status: 'status',
+        // 메인 폼 필드 (상세 검색 모달에 값이 없을 때만 사용)
+        techKw: 'tech_q',
+        prodKw: 'prod_q',
+        inventor: 'inventor',
       };
 
-      // 법적 상태 필터 추가 (상세 검색 모달에서 선택한 경우)
-      if (values.status && Array.isArray(values.status) && values.status.length > 0) {
-        params.status = values.status;
-      }
+      // 1. 상세 검색 모달 필드 우선 처리
+      const modalFields = ['title', 'description', 'claims', 'inventors', 'responsible', 'affiliation', 'appNo', 'regNo', 'status'];
+      const mainFormFields = ['techKw', 'prodKw', 'inventor', 'affiliation', 'appNo'];
+      
+      // 상세 검색 모달 필드 처리
+      modalFields.forEach(key => {
+        const value = values[key];
+        const apiField = mapping[key] || key;
+        
+        if (value !== undefined && value !== null && value !== '') {
+          if (key === 'status' && Array.isArray(value)) {
+            cleanParams[apiField] = value;
+          } else if (typeof value === 'string' && value.trim() !== '') {
+            cleanParams[apiField] = value.trim();
+          }
+        }
+      });
+      
+      // 메인 폼 필드 처리 (상세 검색 모달에 해당 필드가 없을 때만)
+      mainFormFields.forEach(key => {
+        const apiField = mapping[key] || key;
+        // 이미 상세 검색 모달에서 설정된 필드는 건너뛰기
+        if (cleanParams[apiField]) return;
+        
+        const value = values[key];
+        if (value !== undefined && value !== null && value !== '' && typeof value === 'string' && value.trim() !== '') {
+          cleanParams[apiField] = value.trim();
+        }
+      });
 
-      const response = await fetchPatents(params); 
+      // 2. API 호출 
+      const response = await fetchPatents({
+        ...cleanParams,
+        page: 1,
+        limit: 10000 
+      });
 
       if (response && response.data) {
+        // 3. 데이터 매핑
         let patentList = response.data.map((item: any, index: number) => ({
           key: index + 1,
           country: item.countryCode || 'KR',
-          status: item.status || '공개',
+          status: item.status || '공개', // 여기서 item.status가 '포기'인지 확인
           appNo: item.applicationNumber,
           appDate: item.applicationDate || "-",
           title: item.title?.ko || item.title,
           inventor: item.inventors?.[0]?.name || item.inventor,
           affiliation: item.applicant?.name || item.affiliation,
-          // 상세 페이지용 추가 데이터
           summary: item.abstract || "",
           mainClaim: item.representativeClaim || ""
         }));
 
-        // 클라이언트 사이드 필터링 (백엔드 필터링이 제대로 작동하지 않을 경우를 대비)
+        // 4. 강제 필터링 로직 (백엔드에서 '포기' 외 다른게 섞여올 경우 대비)
         if (values.status && Array.isArray(values.status) && values.status.length > 0) {
           patentList = patentList.filter((patent: any) => 
             values.status.includes(patent.status)
@@ -101,12 +135,12 @@ export default function AdvancedSearchPage() {
         message.success(`검색 결과 ${patentList.length}건을 불러왔습니다.`);
       }
     } catch (error) {
+      console.error("Search Error:", error);
       message.error('데이터를 불러오는 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
     }
   };
-
   // 상세 검색 모달 핸들러 (onFinish로 데이터 전달)
   const handleAdvancedSearch = (values: any) => {
     console.log("상세 검색 데이터 수신:", values);
@@ -179,9 +213,9 @@ export default function AdvancedSearchPage() {
     },
     { title: '출원일', dataIndex: 'appDate', width: 120, align: 'center' as const },
     {
-      title: '발명의 명칭', dataIndex: 'title', align: 'center' as const,
+      title: '발명의 명칭', dataIndex: 'title', align: 'left' as const,
       render: (text: string, record: any) => (
-        <b style={{ cursor: 'pointer', color: token.colorText }} onClick={() => { setCurrentPatent(record); setIsDetailOpen(true); }}>
+        <b style={{ cursor: 'pointer', color: token.colorText, textAlign: 'left' }} onClick={() => { setCurrentPatent(record); setIsDetailOpen(true); }}>
           {text}
         </b>
       )

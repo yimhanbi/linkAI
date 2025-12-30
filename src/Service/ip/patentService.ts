@@ -4,9 +4,13 @@ import type { AxiosInstance } from "axios";
 export interface FetchPatentsParams {
   tech_q?: string;
   prod_q?: string;
+  desc_q?: string;
+  claim_q?: string;
   inventor?: string;
+  manager?: string;
   applicant?: string;
   app_num?: string;
+  reg_num?: string;
   status?: string | string[]; // 법적 상태 (단일 또는 배열)
   page?: number;
   limit?: number;

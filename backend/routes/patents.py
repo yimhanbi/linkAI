@@ -2,8 +2,47 @@ from fastapi import APIRouter, HTTPException, Query
 from typing import Optional, List
 from elasticsearch import AsyncElasticsearch
 import os
+import re
 
 router = APIRouter(prefix="/api/patents", tags=["특허 API"])
+
+def _parse_and_or_query(field: str, query_str: str):
+    """
+    AND/OR 연산자를 포함한 쿼리 문자열을 Elasticsearch 쿼리로 변환
+    """
+    if not query_str or not query_str.strip():
+        return None
+    
+    # OR 연산자가 있는 경우
+    if ' OR ' in query_str.upper() or ' or ' in query_str:
+        # 대소문자 구분 없이 OR로 분리
+        terms = re.split(r'\s+OR\s+', query_str, flags=re.IGNORECASE)
+        terms = [t.strip() for t in terms if t.strip()]
+        if len(terms) > 1:
+            return {
+                "bool": {
+                    "should": [
+                        {"match": {field: term}} for term in terms
+                    ],
+                    "minimum_should_match": 1
+                }
+            }
+    
+    # AND 연산자가 있는 경우
+    if ' AND ' in query_str.upper() or ' and ' in query_str:
+        terms = re.split(r'\s+AND\s+', query_str, flags=re.IGNORECASE)
+        terms = [t.strip() for t in terms if t.strip()]
+        if len(terms) > 1:
+            return {
+                "bool": {
+                    "must": [
+                        {"match": {field: term}} for term in terms
+                    ]
+                }
+            }
+    
+    # 연산자가 없는 경우 기본 match 쿼리
+    return {"match": {field: query_str}}
 
 # Elasticsearch 클라이언트 설정
 es = AsyncElasticsearch(
@@ -17,9 +56,13 @@ es = AsyncElasticsearch(
 async def get_patents(
     tech_q: Optional[str] = Query(None, description="기술 키워드"),
     prod_q: Optional[str] = Query(None, description="제품 키워드"),
-    inventor: Optional[str] = Query(None, description="책임연구자"),
+    desc_q: Optional[str] = Query(None, description="명세서 키워드"),
+    claim_q: Optional[str] = Query(None, description="청구범위 키워드"),
+    inventor: Optional[str] = Query(None, description="발명자"),
+    manager: Optional[str] = Query(None, description="책임연구자"),
     applicant: Optional[str] = Query(None, description="연구자 소속(출원인)"),
     app_num: Optional[str] = Query(None, description="출원번호"),
+    reg_num: Optional[str] = Query(None, description="등록번호"),
     status: Optional[List[str]] = Query(None, description="법적 상태 (다중 선택 가능)"),
     page: int = 1, 
     limit: int = 10
@@ -28,32 +71,165 @@ async def get_patents(
         skip = (page - 1) * limit
         must_queries = []
 
-        # 기술 키워드 검색
+        # 기술 키워드 검색 (발명의 명칭, AND/OR 연산자 지원)
         if tech_q:
-            must_queries.append({
-                "multi_match": {
-                    "query": tech_q,
-                    "fields": ["title.ko^2", "abstract"],
-                    "fuzziness": "AUTO"
-                }
-            })
+            if ' OR ' in tech_q.upper() or ' or ' in tech_q:
+                # OR 연산자 처리
+                terms = re.split(r'\s+OR\s+', tech_q, flags=re.IGNORECASE)
+                terms = [t.strip() for t in terms if t.strip()]
+                if len(terms) > 1:
+                    must_queries.append({
+                        "bool": {
+                            "should": [
+                                {
+                                    "multi_match": {
+                                        "query": term,
+                                        "fields": ["title.ko^2", "abstract"],
+                                        "fuzziness": "AUTO"
+                                    }
+                                } for term in terms
+                            ],
+                            "minimum_should_match": 1
+                        }
+                    })
+                else:
+                    must_queries.append({
+                        "multi_match": {
+                            "query": tech_q,
+                            "fields": ["title.ko^2", "abstract"],
+                            "fuzziness": "AUTO"
+                        }
+                    })
+            elif ' AND ' in tech_q.upper() or ' and ' in tech_q:
+                # AND 연산자 처리
+                terms = re.split(r'\s+AND\s+', tech_q, flags=re.IGNORECASE)
+                terms = [t.strip() for t in terms if t.strip()]
+                if len(terms) > 1:
+                    must_queries.append({
+                        "bool": {
+                            "must": [
+                                {
+                                    "multi_match": {
+                                        "query": term,
+                                        "fields": ["title.ko^2", "abstract"],
+                                        "fuzziness": "AUTO"
+                                    }
+                                } for term in terms
+                            ]
+                        }
+                    })
+                else:
+                    must_queries.append({
+                        "multi_match": {
+                            "query": tech_q,
+                            "fields": ["title.ko^2", "abstract"],
+                            "fuzziness": "AUTO"
+                        }
+                    })
+            else:
+                # 연산자 없음
+                must_queries.append({
+                    "multi_match": {
+                        "query": tech_q,
+                        "fields": ["title.ko^2", "abstract"],
+                        "fuzziness": "AUTO"
+                    }
+                })
 
         # 제품 키워드 검색
         if prod_q:
-            must_queries.append({
-                "multi_match": {
-                    "query": prod_q,
-                    "fields": ["title.ko", "abstract"]
-                }
-            })
+            if ' OR ' in prod_q.upper() or ' or ' in prod_q:
+                terms = re.split(r'\s+OR\s+', prod_q, flags=re.IGNORECASE)
+                terms = [t.strip() for t in terms if t.strip()]
+                if len(terms) > 1:
+                    must_queries.append({
+                        "bool": {
+                            "should": [
+                                {
+                                    "multi_match": {
+                                        "query": term,
+                                        "fields": ["title.ko", "abstract"]
+                                    }
+                                } for term in terms
+                            ],
+                            "minimum_should_match": 1
+                        }
+                    })
+                else:
+                    must_queries.append({
+                        "multi_match": {
+                            "query": prod_q,
+                            "fields": ["title.ko", "abstract"]
+                        }
+                    })
+            elif ' AND ' in prod_q.upper() or ' and ' in prod_q:
+                terms = re.split(r'\s+AND\s+', prod_q, flags=re.IGNORECASE)
+                terms = [t.strip() for t in terms if t.strip()]
+                if len(terms) > 1:
+                    must_queries.append({
+                        "bool": {
+                            "must": [
+                                {
+                                    "multi_match": {
+                                        "query": term,
+                                        "fields": ["title.ko", "abstract"]
+                                    }
+                                } for term in terms
+                            ]
+                        }
+                    })
+                else:
+                    must_queries.append({
+                        "multi_match": {
+                            "query": prod_q,
+                            "fields": ["title.ko", "abstract"]
+                        }
+                    })
+            else:
+                must_queries.append({
+                    "multi_match": {
+                        "query": prod_q,
+                        "fields": ["title.ko", "abstract"]
+                    }
+                })
 
-        # 발명자, 출원인, 출원번호 검색
+        # 명세서 키워드 검색
+        if desc_q:
+            desc_query = _parse_and_or_query("abstract", desc_q)
+            if desc_query:
+                must_queries.append(desc_query)
+
+        # 청구범위 키워드 검색
+        if claim_q:
+            claim_query = _parse_and_or_query("claims", claim_q)
+            if claim_query:
+                must_queries.append(claim_query)
+
+        # 발명자 검색 (AND/OR 연산자 지원)
         if inventor:
-            must_queries.append({"match": {"inventors.name": inventor}})
+            inventor_query = _parse_and_or_query("inventors.name", inventor)
+            if inventor_query:
+                must_queries.append(inventor_query)
+        
+        # 책임연구자 검색 (AND/OR 연산자 지원)
+        if manager:
+            manager_query = _parse_and_or_query("inventors.name", manager)
+            if manager_query:
+                must_queries.append(manager_query)
+        
+        # 출원인 검색 (AND/OR 연산자 지원)
         if applicant:
-            must_queries.append({"match": {"applicant.name": applicant}})
+            applicant_query = _parse_and_or_query("applicant.name", applicant)
+            if applicant_query:
+                must_queries.append(applicant_query)
+        
+        # 출원번호 검색
         if app_num:
             must_queries.append({"match": {"applicationNumber": app_num}})
+        
+        # 등록번호 검색
+        if reg_num:
+            must_queries.append({"match": {"registrationNumber": reg_num}})
 
         # 법적 상태 필터링
         if status and len(status) > 0:
