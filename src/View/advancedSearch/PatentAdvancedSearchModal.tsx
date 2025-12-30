@@ -156,6 +156,8 @@ const PatentAdvancedSearchModal: React.FC<PatentAdvancedSearchModalProps> = ({ i
                 <Select.Option value="거절">거절</Select.Option>
                 <Select.Option value="소멸">소멸</Select.Option>
                 <Select.Option value="취하">취하</Select.Option>
+                <Select.Option value="포기">포기</Select.Option>
+
               </Select>
             </Form.Item>
           </Col>

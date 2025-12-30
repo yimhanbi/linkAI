@@ -7,6 +7,7 @@ export interface FetchPatentsParams {
   inventor?: string;
   applicant?: string;
   app_num?: string;
+  status?: string | string[]; // 법적 상태 (단일 또는 배열)
   page?: number;
   limit?: number;
 }

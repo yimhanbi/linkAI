@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query
-from typing import Optional
+from typing import Optional, List
 from elasticsearch import AsyncElasticsearch
 import os
 
@@ -20,6 +20,7 @@ async def get_patents(
     inventor: Optional[str] = Query(None, description="책임연구자"),
     applicant: Optional[str] = Query(None, description="연구자 소속(출원인)"),
     app_num: Optional[str] = Query(None, description="출원번호"),
+    status: Optional[List[str]] = Query(None, description="법적 상태 (다중 선택 가능)"),
     page: int = 1, 
     limit: int = 10
 ):
@@ -54,10 +55,17 @@ async def get_patents(
         if app_num:
             must_queries.append({"match": {"applicationNumber": app_num}})
 
+        # 법적 상태 필터링
+        if status and len(status) > 0:
+            must_queries.append({
+                "terms": {
+                    "status": status
+                }
+            })
+
         # 쿼리 조합
         if must_queries:
-            search_query = {"bool": {"must":must_queries}}
-
+            search_query = {"bool": {"must": must_queries}}
         else:
             search_query = {"match_all": {}}
 

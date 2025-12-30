@@ -53,7 +53,7 @@ export default function AdvancedSearchPage() {
     setCurrentPage(1); 
     try {
       // 상세 검색 모달과 메인 폼의 데이터를 통합하여 API 파라미터 구성
-      const params = {
+      const params: any = {
         tech_q: values.techKw || values.title || "",  // 키워드 혹은 발명의 명칭
         prod_q: values.prodKw || values.description || "", // 제품 키워드 혹은 명세서
         inventor: values.inventor || values.responsible || "", // 연구자
@@ -67,10 +67,15 @@ export default function AdvancedSearchPage() {
         limit: 10000 
       };
 
+      // 법적 상태 필터 추가 (상세 검색 모달에서 선택한 경우)
+      if (values.status && Array.isArray(values.status) && values.status.length > 0) {
+        params.status = values.status;
+      }
+
       const response = await fetchPatents(params); 
 
       if (response && response.data) {
-        const patentList = response.data.map((item: any, index: number) => ({
+        let patentList = response.data.map((item: any, index: number) => ({
           key: index + 1,
           country: item.countryCode || 'KR',
           status: item.status || '공개',
@@ -84,9 +89,16 @@ export default function AdvancedSearchPage() {
           mainClaim: item.representativeClaim || ""
         }));
 
+        // 클라이언트 사이드 필터링 (백엔드 필터링이 제대로 작동하지 않을 경우를 대비)
+        if (values.status && Array.isArray(values.status) && values.status.length > 0) {
+          patentList = patentList.filter((patent: any) => 
+            values.status.includes(patent.status)
+          );
+        }
+
         setDataSource(patentList);
-        setStats({ ...stats, total: response.total, KR: response.total });
-        message.success(`검색 결과 ${response.total}건을 불러왔습니다.`);
+        setStats({ ...stats, total: patentList.length, KR: patentList.length });
+        message.success(`검색 결과 ${patentList.length}건을 불러왔습니다.`);
       }
     } catch (error) {
       message.error('데이터를 불러오는 중 오류가 발생했습니다.');
@@ -139,7 +151,23 @@ export default function AdvancedSearchPage() {
     { title: '국가', dataIndex: 'country', width: 80, align: 'center' as const },
     {
       title: '상태', dataIndex: 'status', width: 80, align: 'center' as const,
-      render: (status: string) => <Tag color={status === '등록' ? 'green' : 'blue'}>{status || '공개'}</Tag>
+      render: (status: string) => {
+        let color = 'default';
+        if (status === '등록') {
+          color = 'green';
+        } else if (status === '공개') {
+          color = 'blue';
+        } else if (status === '거절') {
+          color = 'red';
+        } else if (status === '취하') {
+          color = 'default'; // 회색
+        } else if (status === '소멸') {
+          color = 'orange';
+        } else if (status === '포기') {
+          color = 'purple'; 
+        }
+        return <Tag color={color} style={{ borderRadius: '4px' }}>{status || '공개'}</Tag>;
+      }
     },
     {
       title: '출원번호', dataIndex: 'appNo', width: 150, align: 'center' as const,
