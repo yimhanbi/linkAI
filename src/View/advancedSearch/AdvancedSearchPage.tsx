@@ -146,11 +146,25 @@ export default function AdvancedSearchPage() {
       key: 'status',
       width: 80,
       align: 'center' as const,
-      render: (status: string) => (
-        <Tag color={status === '공개' ? 'blue' : (status === '등록' ? 'green' : 'default')} style={{ borderRadius: '4px' }}>
-          {status || '없음'}
-        </Tag>
-      )
+      render: (status: string) => {
+        let color = 'default';
+        if (status === '등록') {
+          color = 'green';
+        } else if (status === '공개') {
+          color = 'blue';
+        } else if (status === '거절') {
+          color = 'red';
+        } else if (status === '취하') {
+          color = 'default'; // 회색
+        } else if (status === '소멸') {
+          color = 'orange';
+        }
+        return (
+          <Tag color={color} style={{ borderRadius: '4px' }}>
+            {status || '없음'}
+          </Tag>
+        );
+      }
     },
     {
       title: '출원번호',
@@ -182,7 +196,17 @@ export default function AdvancedSearchPage() {
       )
     },
     { title: '책임연구자', dataIndex: 'inventor', key: 'inventor', width: 120, align: 'center' as const },
-    { title: '소속', dataIndex: 'affiliation', key: 'affiliation', width: 150 },
+    { 
+      title: '소속', 
+      dataIndex: 'affiliation', 
+      key: 'affiliation', 
+      width: 250,
+      render: (text: string) => (
+        <div style={{ fontSize: '13px', whiteSpace: 'normal', wordBreak: 'keep-all', lineHeight: '1.5' }}>
+          {text}
+        </div>
+      )
+    },
   ];
 
   const handleShowDetail = (record: any) => {
