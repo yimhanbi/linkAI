@@ -100,8 +100,12 @@ const PatentDetailModal: React.FC<PatentDetailModalProps> = ({ isOpen, onClose, 
       open={isOpen}
       onCancel={onClose}
       width={1200}
-      style={{ top: 20 }}
-      styles={{ body: { padding: '24px' } }}
+      style={{ top: 20, backgroundColor: 'var(--bg)' }}
+      styles={{ 
+        body: { padding: '24px', backgroundColor: 'var(--bg)', color: 'var(--text)' },
+        header: { backgroundColor: 'var(--bg)', borderBottom: '1px solid var(--border)' },
+        footer: { backgroundColor: 'var(--bg)', borderTop: '1px solid var(--border)' }
+      }}
       footer={[
         <Button key="pdf" type="primary" danger icon={<FilePdfOutlined />} onClick={onPdfOpen}>
           특허공보 (PDF)
@@ -111,15 +115,15 @@ const PatentDetailModal: React.FC<PatentDetailModalProps> = ({ isOpen, onClose, 
     >
       {/* 헤더 영역 - MongoDB title.ko 참조 */}
       <div style={{ marginBottom: '20px' }}>
-        <Title level={4} style={{ margin: 0 }}>{patentData.title?.ko || patentData.title || '제목 없음'}</Title>
-        <Text type="secondary" style={{ fontSize: '12px' }}>{patentData.title?.en || ''}</Text>
+        <Title level={4} style={{ margin: 0, color: 'var(--text)' }}>{patentData.title?.ko || patentData.title || '제목 없음'}</Title>
+        <Text type="secondary" style={{ fontSize: '12px', color: 'var(--text-sub)' }}>{patentData.title?.en || ''}</Text>
       </div>
 
       {/* 상단 요약 바 - 첫 번째 발명자와 출원인 표시 */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', border: '1px solid #f0f0f0', marginBottom: '20px' }}>
-        <div style={{ display: 'flex', borderRight: '1px solid #f0f0f0' }}>
-          <div style={{ width: '100px', backgroundColor: '#f9f9f9', padding: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>책임연구자</div>
-          <div style={{ padding: '12px', display: 'flex', alignItems: 'center' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', border: '1px solid var(--border)', marginBottom: '20px' }}>
+        <div style={{ display: 'flex', borderRight: '1px solid var(--border)' }}>
+          <div style={{ width: '100px', backgroundColor: 'var(--bg-sub)', padding: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text)' }}>책임연구자</div>
+          <div style={{ padding: '12px', display: 'flex', alignItems: 'center', color: 'var(--text)' }}>
             {(() => {
               const inventors = patentData.inventors || [];
               if (Array.isArray(inventors) && inventors.length > 0) {
@@ -134,8 +138,8 @@ const PatentDetailModal: React.FC<PatentDetailModalProps> = ({ isOpen, onClose, 
           </div>
         </div>
         <div style={{ display: 'flex' }}>
-          <div style={{ width: '100px', backgroundColor: '#f9f9f9', padding: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>소속(출원인)</div>
-          <div style={{ padding: '12px', display: 'flex', alignItems: 'center' }}>
+          <div style={{ width: '100px', backgroundColor: 'var(--bg-sub)', padding: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text)' }}>소속(출원인)</div>
+          <div style={{ padding: '12px', display: 'flex', alignItems: 'center', color: 'var(--text)' }}>
             {patentData.applicant?.name || patentData.applicant || '-'}
           </div>
         </div>
@@ -151,7 +155,8 @@ const PatentDetailModal: React.FC<PatentDetailModalProps> = ({ isOpen, onClose, 
                 bordered 
                 column={2} 
                 size="small" 
-                labelStyle={{ width: '160px', backgroundColor: '#f9f9f9', fontWeight: 'bold' }}
+                labelStyle={{ width: '160px', backgroundColor: 'var(--bg-sub)', fontWeight: 'bold', color: 'var(--text)' }}
+                contentStyle={{ color: 'var(--text)' }}
               >
                 <Descriptions.Item label="국가">KR</Descriptions.Item>
                 <Descriptions.Item label="행정상태">
@@ -180,7 +185,7 @@ const PatentDetailModal: React.FC<PatentDetailModalProps> = ({ isOpen, onClose, 
                 
                 {/* 요약 */}
                 <Descriptions.Item label="요약" span={2}>
-                  <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.6', minHeight: '50px', color: '#444' }}>
+                  <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.6', minHeight: '50px', color: 'var(--text)' }}>
                     {patentData.abstract || '요약 정보가 없습니다.'}
                   </div>
                 </Descriptions.Item>
@@ -191,9 +196,10 @@ const PatentDetailModal: React.FC<PatentDetailModalProps> = ({ isOpen, onClose, 
                     whiteSpace: 'pre-wrap', 
                     lineHeight: '1.6', 
                     padding: '12px', 
-                    backgroundColor: '#fafafa', 
-                    border: '1px solid #eee',
-                    borderRadius: '4px'
+                    backgroundColor: 'var(--bg-sub)', 
+                    border: '1px solid var(--border)',
+                    borderRadius: '4px',
+                    color: 'var(--text)'
                   }}>
                     {patentData.representativeClaim || '내용 없음'}
                   </div>
@@ -201,37 +207,39 @@ const PatentDetailModal: React.FC<PatentDetailModalProps> = ({ isOpen, onClose, 
 
                 {/* 전체 청구항 (배열 활용) */}
                 <Descriptions.Item label="전체 청구항" span={2}>
-                  <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                  <div style={{ maxHeight: '200px', overflowY: 'auto', color: 'var(--text)' }}>
                     {patentData.claims && patentData.claims.length > 0 ? (
                       patentData.claims.map((claim: string, idx: number) => (
-                        <div key={idx} style={{ marginBottom: '8px', fontSize: '13px' }}>
+                        <div key={idx} style={{ marginBottom: '8px', fontSize: '13px', color: 'var(--text)' }}>
                           {claim}
                         </div>
                       ))
-                    ) : '상세 청구항 정보가 없습니다.'}
+                    ) : <span style={{ color: 'var(--text-sub)' }}>상세 청구항 정보가 없습니다.</span>}
                   </div>
                 </Descriptions.Item>
 
                 <Descriptions.Item label="IPC" span={2}>
-                  {ipcText}
+                  <span style={{ color: 'var(--text)' }}>{ipcText}</span>
                 </Descriptions.Item>
                 <Descriptions.Item label="CPC" span={2}>
                   {renderCPCSettings()}
                 </Descriptions.Item>
-                <Descriptions.Item label="발명자" span={2}>{inventorsText}</Descriptions.Item>
+                <Descriptions.Item label="발명자" span={2}>
+                  <span style={{ color: 'var(--text)' }}>{inventorsText}</span>
+                </Descriptions.Item>
               </Descriptions>
 
               {/* 하단 패밀리/국가연구사업 정보 (현재 데이터에는 없으므로 비워둠) */}
               <Space direction="vertical" size="large" style={{ width: '100%', marginTop: '32px' }}>
                 <div>
-                  <Title level={5} style={{ marginBottom: '12px' }}>패밀리정보</Title>
+                  <Title level={5} style={{ marginBottom: '12px', color: 'var(--text)' }}>패밀리정보</Title>
                   <Table size="small" dataSource={[]} locale={{ emptyText: '정보 없음' }} bordered pagination={false} />
                 </div>
               </Space>
             </div>
           )
         },
-        { label: '기술분석', key: '2', children: <div style={{ padding: '40px', textAlign: 'center' }}>데이터 분석 중입니다.</div> },
+        { label: '기술분석', key: '2', children: <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text)' }}>데이터 분석 중입니다.</div> },
       ]} />
     </Modal>
   );

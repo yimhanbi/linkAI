@@ -1,5 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware # 1. 미들웨어 추가
+from fastapi.staticfiles import StaticFiles
+import os 
 from backend.database import db_manager
 from backend.routes import patents
 
@@ -13,6 +15,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 3. 정적 파일(PDF) 경로 설정 추가
+PDF_DIR = "/Users/imhanbi/dev/linkai/backend/storage/pdfs"
+
+# 폴더가 존재하는지 확인 (디버깅용)
+if not os.path.exists(PDF_DIR):
+    print(f"⚠️ 경고: PDF 폴더를 찾을 수 없습니다: {PDF_DIR}")
+
+app.mount("/static/pdfs", StaticFiles(directory=PDF_DIR), name="static_pdfs")
 
 @app.on_event("startup")
 async def startup():

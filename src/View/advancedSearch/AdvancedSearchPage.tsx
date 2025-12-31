@@ -7,6 +7,7 @@ import PatentPdfModal from './PatentPdfModal';
 import { fetchPatents } from '../../Service/ip/patentService';
 import PatentAdvancedSearchModal from './PatentAdvancedSearchModal';
 
+
 const { Title, Text } = Typography;
 
 export default function AdvancedSearchPage() {
@@ -30,6 +31,7 @@ export default function AdvancedSearchPage() {
   const [isPdfOpen, setIsPdfOpen] = useState(false);
   const [currentPatent, setCurrentPatent] = useState<any | null>(null);
   const [isAdvModalOpen, setIsAdvModalOpen] = useState(false); 
+  const [selectedPatent, setSelectedPatent] = useState<any>(null);
 
   // --- 탭 데이터 필터링 ---
   const filteredData = useMemo(() => {
@@ -46,6 +48,7 @@ export default function AdvancedSearchPage() {
     const startIndex = (currentPage - 1) * pageSize;
     return filteredData.slice(startIndex, startIndex + pageSize);
   }, [filteredData, currentPage, pageSize]);
+
 
   // --- 검색 실행 로직  ---
   const onFinish = async (values: any) => {
@@ -426,10 +429,29 @@ export default function AdvancedSearchPage() {
         />
       )}
 
-      {/* 모달 영역 */}
-      <PatentDetailModal isOpen={isDetailOpen} onClose={() => setIsDetailOpen(false)} data={currentPatent} onPdfOpen={() => setIsPdfOpen(true)} />
-      <PatentPdfModal isOpen={isPdfOpen} onClose={() => setIsPdfOpen(false)} appNo={currentPatent?.appNo} />
-      <PatentAdvancedSearchModal isOpen={isAdvModalOpen} onClose={() => setIsAdvModalOpen(false)} onSearch={handleAdvancedSearch} />
+     {/* --- 모달 영역 연동 --- */}
+      {/* 1. 상세 정보 모달 */}
+      <PatentDetailModal 
+        isOpen={isDetailOpen} 
+        onClose={() => setIsDetailOpen(false)} 
+        data={currentPatent} 
+        onPdfOpen={() => setIsPdfOpen(true)} // PDF 버튼 클릭 시 PDF 모달 활성화
+      />
+
+      {/* 2. PDF 뷰어 모달 (appNo와 pdfPath를 모두 전달) */}
+      <PatentPdfModal 
+        isOpen={isPdfOpen} 
+        onClose={() => setIsPdfOpen(false)} 
+        appNo={currentPatent?.applicationNumber || currentPatent?.appNo} 
+        pdfPath={currentPatent?.pdfPath} 
+      />
+
+      {/* 3. 상세 검색 모달 */}
+      <PatentAdvancedSearchModal 
+        isOpen={isAdvModalOpen} 
+        onClose={() => setIsAdvModalOpen(false)} 
+        onSearch={handleAdvancedSearch} 
+      />
     </div>
   );
 }

@@ -5,38 +5,42 @@ interface PatentPdfModalProps {
   isOpen: boolean;
   onClose: () => void;
   appNo: string | undefined;
+  pdfPath?: string; // DB에서 가져온 /static/pdfs/... 경로
 }
 
-const PatentPdfModal: React.FC<PatentPdfModalProps> = ({ isOpen, onClose, appNo }) => {
-  // 실제 연동 시: const pdfUrl = `https://api.patent.go.kr/viewer/${appNo}`;
-  const isApiConnected = false; // 현재 연동 전 상태
+const PatentPdfModal: React.FC<PatentPdfModalProps> = ({ isOpen, onClose, appNo, pdfPath }) => {
+  // 백엔드 서버 주소 (FastAPI 8000 포트 기준)
+  const BASE_URL = "http://localhost:8000";
+  
+  // 전체 URL 조합
+  const fullPdfUrl = pdfPath ? `${BASE_URL}${pdfPath}` : null;
 
   return (
     <Modal
       title={`특허공보 PDF - ${appNo || ''}`}
       open={isOpen}
       onCancel={onClose}
-      width="90%"
+      width="95%"
       style={{ top: 20 }}
       footer={null}
       styles={{ body: { height: '85vh', padding: 0 } }}
       destroyOnClose
     >
-      {isApiConnected ? (
+      {fullPdfUrl ? (
         <iframe
-          src={`/pdf-viewer-placeholder.html?no=${appNo}`}
+          src={fullPdfUrl}
           width="100%"
           height="100%"
           style={{ border: 'none' }}
-          title="Patent PDF"
+          title="Patent PDF Viewer"
         />
       ) : (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
           <Result
-            status="404"
-            title="PDF API 연동 준비 중"
-            subTitle={`출원번호 [${appNo}]에 대한 PDF 뷰어 API 연동이 필요합니다.`}
-            extra={<Button onClick={onClose}>닫기</Button>}
+            status="warning"
+            title="PDF 파일을 찾을 수 없습니다"
+            subTitle={`출원번호 [${appNo}]에 해당하는 로컬 PDF 파일이 서버에 존재하지 않습니다.`}
+            extra={<Button type="primary" onClick={onClose}>닫기</Button>}
           />
         </div>
       )}
