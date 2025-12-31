@@ -109,19 +109,51 @@ export default function AdvancedSearchPage() {
       });
 
       if (response && response.data) {
-        // 3. 데이터 매핑
-        let patentList = response.data.map((item: any, index: number) => ({
-          key: index + 1,
-          country: item.countryCode || 'KR',
-          status: item.status || '공개', // 여기서 item.status가 '포기'인지 확인
-          appNo: item.applicationNumber,
-          appDate: item.applicationDate || "-",
-          title: item.title?.ko || item.title,
-          inventor: item.inventors?.[0]?.name || item.inventor,
-          affiliation: item.applicant?.name || item.affiliation,
-          summary: item.abstract || "",
-          mainClaim: item.representativeClaim || ""
-        }));
+        // 디버깅: 실제 응답 데이터 구조 확인
+        if (response.data.length > 0) {
+          console.log('Sample patent data from API:', response.data[0]);
+        }
+        
+        // 3. 데이터 매핑 (테이블용 간소화 + 모달용 전체 데이터 보존)
+        let patentList = response.data.map((item: any, index: number) => {
+          // Elasticsearch에서 반환된 원본 데이터를 그대로 보존 (중요!)
+          // item은 Elasticsearch _source의 원본 데이터입니다
+          const fullData = {
+            ...item,  // 모든 원본 필드 포함
+            // 명시적으로 필요한 필드들 확인
+            applicationNumber: item.applicationNumber,
+            abstract: item.abstract,
+            applicant: item.applicant,
+            claims: item.claims,
+            inventors: item.inventors,
+            ipcCodes: item.ipcCodes,
+            cpcCodes: item.cpcCodes,
+            rawRef: item.rawRef,
+            title: item.title,
+            applicationDate: item.applicationDate,
+            openNumber: item.openNumber,
+            status: item.status,
+            publicationDate: item.publicationDate,
+            publicationNumber: item.publicationNumber,
+            registrationDate: item.registrationDate,
+            registrationNumber: item.registrationNumber,
+            representativeClaim: item.representativeClaim
+          };
+          
+          return {
+            key: index + 1,
+            // 테이블 표시용 필드
+            country: item.countryCode || 'KR',
+            status: item.status || '공개',
+            appNo: item.applicationNumber,
+            appDate: item.applicationDate || "-",
+            title: item.title?.ko || item.title || '',
+            inventor: item.inventors?.[0]?.name || item.inventor || '',
+            affiliation: item.applicant?.name || item.affiliation || '',
+            // 모달에 전달할 전체 원본 데이터 (Elasticsearch _source 그대로)
+            fullData: fullData
+          };
+        });
 
         // 4. 강제 필터링 로직 (백엔드에서 '포기' 외 다른게 섞여올 경우 대비)
         if (values.status && Array.isArray(values.status) && values.status.length > 0) {
@@ -206,7 +238,7 @@ export default function AdvancedSearchPage() {
     {
       title: '출원번호', dataIndex: 'appNo', width: 150, align: 'center' as const,
       render: (text: string, record: any) => (
-        <a style={{ color: token.colorLink }} onClick={() => { setCurrentPatent(record); setIsDetailOpen(true); }}>
+        <a style={{ color: token.colorLink }} onClick={() => { setCurrentPatent(record.fullData || record); setIsDetailOpen(true); }}>
           {text}
         </a>
       )
@@ -215,7 +247,7 @@ export default function AdvancedSearchPage() {
     {
       title: '발명의 명칭', dataIndex: 'title', align: 'left' as const,
       render: (text: string, record: any) => (
-        <b style={{ cursor: 'pointer', color: token.colorText, textAlign: 'left' }} onClick={() => { setCurrentPatent(record); setIsDetailOpen(true); }}>
+        <b style={{ cursor: 'pointer', color: token.colorText, textAlign: 'left' }} onClick={() => { setCurrentPatent(record.fullData || record); setIsDetailOpen(true); }}>
           {text}
         </b>
       )

@@ -1,142 +1,240 @@
 import os
 import pymongo
+from pymongo import UpdateOne
 from dotenv import load_dotenv
-from pprint import pprint
-from tqdm import tqdm 
+from tqdm import tqdm
+from elasticsearch import Elasticsearch
+from elasticsearch.helpers import bulk 
 
-# 1. 환경 변수 로드
-env_path = os.path.join(os.path.dirname(__file__), '..', '.env')
-load_dotenv(dotenv_path=env_path)
+# 1. 환경 설정 및 DB 연결
+def get_db(db_name=None):
+    # .env 파일 로드 시도 (경로를 더 명확하게 지정)
+    env_path = os.path.join(os.path.dirname(__file__), '..', '..', '.env')
+    load_dotenv(dotenv_path=env_path)
+    # 추가로 현재 디렉토리에서도 시도
+    load_dotenv()
+    
+    mongo_uri = os.getenv("MONGO_URI") or "mongodb://localhost:27017"
+    if not db_name:
+        db_name = os.getenv("DB_NAME") or "linkai"  # 🚀 DB_NAME이 None이면 'linkai'를 기본값으로 사용
+    
+    print(f"📡 MongoDB 연결 시도: {mongo_uri} / DB: {db_name}")
+    
+    try:
+        client = pymongo.MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
+        # 연결 테스트
+        client.admin.command('ping')
+        print("✅ MongoDB 연결 성공!")
+        return client, client[db_name]
+    except pymongo.errors.ServerSelectionTimeoutError:
+        print("❌ MongoDB 연결 실패!")
+        print(f"   MongoDB 서버가 실행 중인지 확인해주세요: {mongo_uri}")
+        print("   MongoDB 시작 방법:")
+        print("   - macOS: brew services start mongodb-community")
+        print("   - 또는: mongod --dbpath /path/to/data")
+        raise
+    except Exception as e:
+        print(f"❌ MongoDB 연결 오류: {e}")
+        raise
 
-MONGO_URI = os.getenv("MONGO_URI")
-DB_NAME = os.getenv("DB_NAME")
-
-def get_db():
-    client = pymongo.MongoClient(MONGO_URI)
-    return client[DB_NAME]
+def get_es_client():
+    """Elasticsearch 클라이언트 초기화"""
+    es = Elasticsearch(
+        "http://127.0.0.1:9200",
+        verify_certs=False,
+        request_timeout=30
+    )
+    # 연결 테스트
+    if es.ping():
+        print("✅ Elasticsearch 연결 성공!")
+        return es
+    else:
+        print("⚠️  Elasticsearch 연결 실패 (서버 응답 없음)")
+        return None
 
 def transform_raw_to_service(raw):
     try:
-        # [공통] 필수 식별자 추출
         app_num = raw.get('applicationNumber')
-        if not app_num:
-            return None
+        if not app_num: return None
 
-        file_detail = raw.get('fileDetail', {}) 
+        # [필드 매핑 핵심 로직]
         
-        # 1. 행정상태 (가급적 구체적인 상태값 우선 추출)
-        status = raw.get('applicationStatus') or raw.get('registrationStatus') or "공개"
+        # A. 기본 정보 뭉치 (biblioSummaryInfo)
+        biblio = raw.get('biblioSummaryInfoArray', {}).get('biblioSummaryInfo', {})
+        if isinstance(biblio, list): biblio = biblio[0] if biblio else {}
 
-        # 2. 대표청구항 처리
-        claim_info_array = raw.get('claimInfoArray', {}).get('claimInfo', [])
-        if isinstance(claim_info_array, dict): 
-            claim_info_array = [claim_info_array]
+        # B. 제목: inventionTitle 사용 (null 방지)
+        title_ko = (biblio.get('inventionTitle') or "제목 없음").strip()
+        title_en = biblio.get('inventionTitleEng')
+
+        # C. 요약: abstractInfo -> astrtCont 만 사용 (주소 등 불필요 정보 제거)
+        abs_info = raw.get('abstractInfoArray', {}).get('abstractInfo', {})
+        if isinstance(abs_info, list): abs_info = abs_info[0] if abs_info else {}
+        clean_abstract = abs_info.get('astrtCont', "요약 정보 없음")
+
+        # D. 청구항: claimInfoArray 활용 (대표/전체 분리)
+        claim_info_list = raw.get('claimInfoArray', {}).get('claimInfo', [])
+        if isinstance(claim_info_list, dict): claim_info_list = [claim_info_list]
         
-        if claim_info_array and len(claim_info_array) > 0:
-            claim_text = claim_info_array[0].get('claim', "").strip()
-        else:
-            claim_text = raw.get('representativeClaim') or "내용 없음"
+        all_claims = [c.get('claim', '').strip() for c in claim_info_list if c.get('claim')]
+        rep_claim = all_claims[0] if all_claims else "내용 없음"
 
-        # 3. 요약(Abstract) 데이터 정제 (불필요한 헤더 제거)
-        raw_summary = file_detail.get('summary', "")
-        clean_abstract = raw_summary.split('【')[0].strip() if '【' in raw_summary else raw_summary.strip()
+        # E. 출원인: applicantInfo -> name 만 사용 (주소 제외)
+        app_info = raw.get('applicantInfoArray', {}).get('applicantInfo', {})
+        if isinstance(app_info, list): app_info = app_info[0] if app_info else {}
+        app_name = app_info.get('name', "Unknown").strip()
 
-        # 4. CPC 코드 처리
-        cpc_codes = []
-        cpc_wrapper = raw.get('cpcInfoArray', {})
-        if cpc_wrapper:
-            cpc_info = cpc_wrapper.get('cpcInfo', [])
-            if isinstance(cpc_info, dict): cpc_info = [cpc_info]
-            cpc_codes = [item.get('cpcNumber').strip() for item in cpc_info if item.get('cpcNumber')]
+        # F. 분류 코드 (IPC/CPC)
+        ipc_info = raw.get('ipcInfoArray', {}).get('ipcInfo', [])
+        if isinstance(ipc_info, dict): ipc_info = [ipc_info]
+        ipc_codes = [i.get('ipcNumber', '').strip() for i in ipc_info if i.get('ipcNumber')]
+        
+        cpc_info = raw.get('cpcInfoArray', {}).get('cpcInfo', [])
+        if isinstance(cpc_info, dict): cpc_info = [cpc_info]
+        cpc_codes = [i.get('CooperativepatentclassificationNumber', '').strip() for i in cpc_info if i.get('CooperativepatentclassificationNumber')]
 
-        # 5. 날짜 및 번호들
-        app_date = raw.get('applicationDate')
-        pub_num = raw.get('publicationNumber')
-        pub_date = raw.get('publicationDate')
-        reg_num = raw.get('registrationNumber')
-        reg_date = raw.get('registrationDate')
-
-        # 6. IPC 코드
-        ipc_codes = []
-        ipc_wrapper = raw.get('ipcInfoArray', {})
-        if ipc_wrapper:
-            ipc_info = ipc_wrapper.get('ipcInfo', [])
-            if isinstance(ipc_info, dict): ipc_info = [ipc_info]
-            ipc_codes = [item.get('ipcNumber').strip() for item in ipc_info if item.get('ipcNumber')]
-        if not ipc_codes: ipc_codes = ["Unknown"]
-
-        # 7. 출원인 및 발명자 처리
-        applicant_info = raw.get('applicantInfoArray', {}).get('applicantInfo', [])
-        if isinstance(applicant_info, dict): applicant_info = [applicant_info]
-        app_name = applicant_info[0].get('name', "Unknown Applicant").strip() if applicant_info else "Unknown Applicant"
-
-        inventor_info = raw.get('inventorInfoArray', {}).get('inventorInfo', [])
-        if isinstance(inventor_info, dict): inventor_info = [inventor_info]
-        inventor_objects = [{"name": i.get('name', "").strip(), "country": None} for i in inventor_info if i.get('name')]
-
-        # 최종 변환 데이터 조립
-        transformed = {
+        return {
             "applicationNumber": str(app_num),
-            "applicationDate": app_date, 
-            "status": status,            
-            "title": {
-                "ko": file_detail.get('inventionTitle', "제목 없음").strip(),
-                "en": None
-            },
+            "applicationDate": biblio.get('applicationDate'),
+            "status": biblio.get('registerStatus') or "공개",
+            "title": {"ko": title_ko, "en": title_en},
             "applicant": {"name": app_name, "country": None},
-            "inventors": inventor_objects,
+            "abstract": clean_abstract,
+            "representativeClaim": rep_claim,
+            "claims": all_claims,
             "ipcCodes": ipc_codes,
             "cpcCodes": cpc_codes,
-            "publicationNumber": pub_num,
-            "publicationDate": pub_date,
-            "registrationNumber": reg_num,
-            "registrationDate": reg_date,
-            "abstract": clean_abstract or None,
-            "representativeClaim": claim_text,
-            "claims": [item.get('claim', '').strip() for item in claim_info_array if item.get('claim')],
+            "openNumber": biblio.get('openNumber'),
             "rawRef": raw.get('_id')
         }
-        return transformed
-
     except Exception as e:
-        # 변환 단계에서의 오류 출력
-        print(f"\n⚠️ 변환 중 개별 문서 오류 발생: {e}")
+        print(f"Error processing {raw.get('applicationNumber')}: {e}")
         return None
 
 if __name__ == "__main__":
-    db = get_db()
-    raw_col = db["moaai_db"]    
-    service_col = db["patents"] 
-
-    total_docs = raw_col.count_documents({})
-    print(f"🚀 전체 데이터 이관 시작 (총 {total_docs}건)...")
+    try:
+        client, db = get_db()
+    except Exception as e:
+        print("\n❌ MongoDB 연결에 실패했습니다.")
+        print("   MongoDB 서버가 실행 중인지 확인해주세요.")
+        print("   시작 방법:")
+        print("   - macOS: brew services start mongodb-community")
+        print("   - 또는: mongod --dbpath /path/to/data")
+        exit(1)
     
-    raw_data_list = raw_col.find()
+    # 모든 데이터베이스 확인
+    print("\n📋 MongoDB의 모든 데이터베이스:")
+    db_list = client.list_database_names()
+    for db_name in db_list:
+        if db_name not in ['admin', 'config', 'local']:  # 시스템 DB 제외
+            temp_db = client[db_name]
+            collections = temp_db.list_collection_names()
+            total_docs = sum(temp_db[col].count_documents({}) for col in collections)
+            print(f"   - {db_name}: {len(collections)}개 컬렉션, 총 {total_docs}건")
     
-    success_count = 0
-    error_count = 0
-
-    for raw in tqdm(raw_data_list, total=total_docs, desc="변환 중"):
-        transformed = transform_raw_to_service(raw)
+    # 원본 데이터 찾기: 모든 데이터베이스에서 biblioSummaryInfoArray 필드가 있는 컬렉션 찾기
+    raw_db_name = None
+    raw_collection_name = None
+    
+    for db_name in db_list:
+        if db_name in ['admin', 'config', 'local']:
+            continue
+        temp_db = client[db_name]
+        collections = temp_db.list_collection_names()
         
-        if transformed:
-            try:
-                # upsert 실행
-                service_col.update_one(
-                    {"applicationNumber": transformed["applicationNumber"]},
-                    {"$set": transformed},
-                    upsert=True
-                )
-                success_count += 1
-            except Exception as e:
-                # ❌ 저장 실패 시 구체적인 이유 출력 
-                print(f"\n❌ DB 저장 실패 (출원번호: {transformed.get('applicationNumber')}): {e}")
-                error_count += 1
-        else:
-            error_count += 1
+        for col_name in collections:
+            sample = temp_db[col_name].find_one()
+            if sample and 'biblioSummaryInfoArray' in sample:
+                raw_db_name = db_name
+                raw_collection_name = col_name
+                print(f"\n✅ 원본 데이터 발견!")
+                print(f"   데이터베이스: {db_name}")
+                print(f"   컬렉션: {col_name}")
+                print(f"   문서 수: {temp_db[col_name].count_documents({})}건")
+                break
+        
+        if raw_db_name:
+            break
+    
+    if not raw_db_name:
+        print("\n❌ 원본 데이터를 찾을 수 없습니다!")
+        print("\n📝 원본 데이터를 MongoDB에 먼저 로드해야 합니다.")
+        print("   원본 데이터는 다음 형식이어야 합니다:")
+        print("   - biblioSummaryInfoArray 필드 포함")
+        print("   - abstractInfoArray 필드 포함")
+        print("   - claimInfoArray 필드 포함")
+        print("\n   데이터 로드 방법:")
+        print("   1. JSON 파일이 있다면: mongoimport --db <db_name> --collection <collection_name> --file <file.json>")
+        print("   2. 또는 Python 스크립트로 데이터를 MongoDB에 저장")
+        exit(1)
+    
+    # 원본 데이터베이스와 컬렉션 설정
+    raw_db = client[raw_db_name]
+    raw_col = raw_db[raw_collection_name]
+    service_col = db["patents"]  # 변환된 데이터는 linkai DB의 patents 컬렉션에 저장
+    
+    # Elasticsearch 클라이언트 초기화
+    es = get_es_client()
+    es_enabled = es is not None
 
-    print("\n" + "="*50)
-    print(f"🎊 이관 완료!")
-    print(f"✅ 최종 성공: {success_count} / {total_docs}")
-    print(f"❌ 최종 실패: {error_count}")
-    print("="*50)
+    docs = list(raw_col.find())
+    print(f"🚀 [필드 정정] 데이터 이관 시작 ({len(docs)}건)...")
+    if es_enabled:
+        print("📡 Elasticsearch 동기화 활성화됨")
+    
+    ops = []
+    es_actions = []  # Elasticsearch bulk actions
+    es_count = 0
+    
+    for raw in tqdm(docs, desc="변환 및 저장 중"):
+        data = transform_raw_to_service(raw)
+        if data:
+            # MongoDB 저장 준비
+            ops.append(UpdateOne({"applicationNumber": data["applicationNumber"]}, {"$set": data}, upsert=True))
+            
+            # Elasticsearch 인덱싱 준비
+            if es_enabled:
+                # _id를 applicationNumber로 사용 (또는 MongoDB _id 사용 가능)
+                doc_id = str(data.get("rawRef") or data["applicationNumber"])
+                # rawRef를 문자열로 변환
+                es_doc = data.copy()
+                if "rawRef" in es_doc:
+                    es_doc["rawRef"] = str(es_doc["rawRef"])
+                
+                es_actions.append({
+                    "_index": "patents",
+                    "_id": doc_id,
+                    "_source": es_doc
+                })
+            
+            # MongoDB bulk write (500개마다)
+            if len(ops) >= 500:
+                service_col.bulk_write(ops)
+                ops = []
+            
+            # Elasticsearch bulk index (500개마다)
+            if es_enabled and len(es_actions) >= 500:
+                success, failed = bulk(es, es_actions, raise_on_error=False)
+                es_count += success
+                if failed:
+                    print(f"⚠️  Elasticsearch 인덱싱 실패: {len(failed)}건")
+                es_actions = []
+    
+    # 남은 데이터 처리
+    if ops:
+        service_col.bulk_write(ops)
+    
+    if es_enabled:
+        if es_actions:
+            success, failed = bulk(es, es_actions, raise_on_error=False)
+            es_count += success
+            if failed:
+                print(f"⚠️  Elasticsearch 인덱싱 실패: {len(failed)}건")
+        
+        # 인덱스 새로고침 (검색 가능하도록)
+        es.indices.refresh(index="patents")
+        print(f"✅ Elasticsearch 동기화 완료: {es_count}건 인덱싱됨")
+    
+    print("\n✅ MongoDB 이관 완료! 이제 모달에서 요약과 청구항이 완벽히 분리되어 보입니다.")
+    if es_enabled:
+        print("✅ Elasticsearch 동기화 완료! UI에서 바로 검색 가능합니다.")
