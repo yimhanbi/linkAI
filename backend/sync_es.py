@@ -18,10 +18,15 @@ from tqdm import tqdm
 
 load_dotenv()
 
-def get_db():
+def get_db(use_cloud=False):
     """MongoDB 연결"""
-    mongo_uri = os.getenv("MONGO_URI") or "mongodb://localhost:27017"
-    db_name = os.getenv("DB_NAME") or "linkai"
+    if use_cloud:
+        mongo_uri = "mongodb+srv://hanbi1_db_user:moaai1234@cluster0.aw3hxbh.mongodb.net/"
+        print("☁️ 클라우드 MongoDB 사용")
+    else:
+        mongo_uri = os.getenv("MONGO_URI") or "mongodb://localhost:27017"
+    
+    db_name = os.getenv("DB_NAME") or "moaai_db"
     
     print(f"📡 MongoDB 연결: {mongo_uri} / DB: {db_name}")
     client = pymongo.MongoClient(mongo_uri)
@@ -41,9 +46,9 @@ def get_es_client():
         print("❌ Elasticsearch 연결 실패 (서버 응답 없음)")
         return None
 
-def sync_data():
+def sync_data(use_cloud=False, clear_index=False):
     """MongoDB patents 컬렉션의 모든 데이터를 Elasticsearch로 동기화"""
-    db = get_db()
+    db = get_db(use_cloud=use_cloud)
     es = get_es_client()
     
     if not es:
@@ -51,6 +56,13 @@ def sync_data():
         return
     
     try:
+        # 인덱스 삭제 옵션 (중복 데이터 제거)
+        if clear_index:
+            if es.indices.exists(index="patents"):
+                es.indices.delete(index="patents")
+                print("🗑️  기존 Elasticsearch 인덱스 삭제 완료")
+            # 인덱스 재생성 (자동으로 생성됨)
+        
         service_col = db["patents"]
         total_count = service_col.count_documents({})
         
@@ -61,18 +73,26 @@ def sync_data():
         
         # MongoDB에서 데이터 읽기 및 Elasticsearch bulk 준비
         for patent in tqdm(service_col.find({}), total=total_count, desc="동기화 중"):
-            # _id 필드 처리
-            p_id = str(patent.pop("_id", patent.get("applicationNumber", "")))
+            # _id 필드 처리 - applicationNumber를 _id로 사용 (transform_patents.py와 동일하게)
+            p_id = patent.get("applicationNumber", "")
+            if not p_id:
+                # applicationNumber가 없으면 MongoDB _id 사용
+                p_id = str(patent.get("_id", ""))
+            
+            # _id 필드를 제거 (Elasticsearch _id와 충돌 방지)
+            patent_copy = patent.copy()
+            if "_id" in patent_copy:
+                del patent_copy["_id"]
             
             # rawRef를 문자열로 변환
-            if "rawRef" in patent:
-                patent["rawRef"] = str(patent["rawRef"])
+            if "rawRef" in patent_copy:
+                patent_copy["rawRef"] = str(patent_copy["rawRef"])
             
             # Elasticsearch bulk action 준비
             es_actions.append({
                 "_index": "patents",
-                "_id": p_id,
-                "_source": patent
+                "_id": str(p_id),
+                "_source": patent_copy
             })
             
             # 500개마다 bulk 실행
@@ -105,4 +125,13 @@ def sync_data():
         print("🔌 연결 종료")
 
 if __name__ == "__main__":
-    sync_data()
+    import sys
+    
+    # 명령줄 인자로 클라우드 사용 여부 확인
+    use_cloud = "--cloud" in sys.argv or "-c" in sys.argv
+    clear_index = "--clear" in sys.argv or "--reset" in sys.argv
+    
+    if clear_index:
+        print("⚠️  기존 Elasticsearch 인덱스를 삭제하고 재생성합니다...")
+    
+    sync_data(use_cloud=use_cloud, clear_index=clear_index)

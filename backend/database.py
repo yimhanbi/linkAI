@@ -19,7 +19,7 @@ class MongoDB:
         
         if not db_name:
             print("⚠️  DB_NAME 환경 변수가 설정되지 않았습니다. 기본값을 사용합니다.")
-            db_name = "linkai"
+            db_name = "moaai_db"
         
         self.client = AsyncIOMotorClient(mongo_uri)
         self.db = self.client[db_name]
