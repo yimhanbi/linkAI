@@ -4,6 +4,7 @@ from fastapi.staticfiles import StaticFiles
 import os 
 from backend.database import db_manager
 from backend.routes import patents
+from backend.routes import patents, auth 
 
 app = FastAPI(title="LinkAI 서비스 API")
 
@@ -34,7 +35,8 @@ async def shutdown():
     db_manager.close()
 
 # 라우터 연결
-app.include_router(patents.router)
+app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
+app.include_router(patents.router, prefix="/api/patents", tags=["Patents"])
 
 @app.get("/")
 async def index():

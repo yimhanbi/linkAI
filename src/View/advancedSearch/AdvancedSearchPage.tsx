@@ -10,6 +10,69 @@ import PatentAdvancedSearchModal from './PatentAdvancedSearchModal';
 
 const { Title, Text } = Typography;
 
+// 하이라이팅 텍스트를 React 요소로 변환하는 유틸리티 함수
+const renderHighlightedText = (
+  text: string | { ko?: string; en?: string } | null, 
+  highlight?: string[] | string
+): React.ReactNode => {
+  if (!text) return '-';
+  
+  // highlight가 배열인 경우 첫 번째 요소 사용, 문자열이면 그대로 사용
+  const highlightText = Array.isArray(highlight) ? highlight[0] : highlight;
+  
+  // 객체 형태인 경우 (title.ko, title.en)
+  if (typeof text === 'object' && text !== null) {
+    const koText = text.ko || '';
+    const enText = text.en || '';
+    
+    // highlight 객체에서 해당 필드 찾기
+    let koHighlight: string | undefined;
+    let enHighlight: string | undefined;
+    
+    if (Array.isArray(highlight)) {
+      // 배열에서 찾기 (Elasticsearch는 필드별로 배열 반환)
+      koHighlight = highlight.find(h => h && typeof h === 'string') || undefined;
+      enHighlight = highlight.find(h => h && typeof h === 'string') || undefined;
+    } else if (typeof highlight === 'string') {
+      // 문자열인 경우 한국어/영어 구분 없이 사용
+      koHighlight = highlight;
+      enHighlight = highlight;
+    }
+    
+    return (
+      <div>
+        {koText && (
+          <div>
+            {koHighlight ? (
+              <span dangerouslySetInnerHTML={{ __html: koHighlight }} />
+            ) : (
+              <span>{koText}</span>
+            )}
+          </div>
+        )}
+        {enText && (
+          <div style={{ fontSize: '0.9em', color: 'var(--text-sub)', marginTop: '4px' }}>
+            {enHighlight ? (
+              <span dangerouslySetInnerHTML={{ __html: enHighlight }} />
+            ) : (
+              <span>{enText}</span>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+  
+  // 문자열 형태인 경우
+  const textStr = String(text);
+  
+  if (highlightText) {
+    return <span dangerouslySetInnerHTML={{ __html: highlightText }} />;
+  }
+  
+  return <span>{textStr}</span>;
+};
+
 export default function AdvancedSearchPage() {
   const [form] = Form.useForm();
   const { theme: appTheme } = useContext(ThemeContext);
@@ -143,6 +206,9 @@ export default function AdvancedSearchPage() {
             representativeClaim: item.representativeClaim
           };
           
+          // 하이라이팅 정보 추출
+          const highlight = item._highlight || {};
+          
           return {
             key: index + 1,
             // 테이블 표시용 필드
@@ -153,6 +219,8 @@ export default function AdvancedSearchPage() {
             title: item.title?.ko || item.title || '',
             inventor: item.inventors?.[0]?.name || item.inventor || '',
             affiliation: item.applicant?.name || item.affiliation || '',
+            // 하이라이팅 정보
+            _highlight: highlight,
             // 모달에 전달할 전체 원본 데이터 (Elasticsearch _source 그대로)
             fullData: fullData
           };
@@ -249,11 +317,33 @@ export default function AdvancedSearchPage() {
     { title: '출원일', dataIndex: 'appDate', width: 120, align: 'center' as const },
     {
       title: '발명의 명칭', dataIndex: 'title', align: 'left' as const,
-      render: (text: string, record: any) => (
-        <b style={{ cursor: 'pointer', color: token.colorText, textAlign: 'left' }} onClick={() => { setCurrentPatent(record.fullData || record); setIsDetailOpen(true); }}>
-          {text}
-        </b>
-      )
+      render: (text: string, record: any) => {
+        const highlight = record._highlight || {};
+        // 한국어 하이라이팅만 사용 
+        const titleHighlight = highlight['title.ko'] || null;
+        const originalTitle = record.fullData?.title || text;
+        
+        // 한국어만 추출
+        let koTitle: string = '';
+        if (typeof originalTitle === 'object' && originalTitle !== null) {
+          koTitle = originalTitle.ko || '';
+        } else {
+          koTitle = String(originalTitle || text || '');
+        }
+        
+        // 하이라이팅 적용
+        const highlightedTitle = titleHighlight ? (
+          <span dangerouslySetInnerHTML={{ __html: titleHighlight }} />
+        ) : (
+          <span>{koTitle}</span>
+        );
+        
+        return (
+          <b style={{ cursor: 'pointer', color: token.colorText, textAlign: 'left' }} onClick={() => { setCurrentPatent(record.fullData || record); setIsDetailOpen(true); }}>
+            {highlightedTitle}
+          </b>
+        );
+      }
     },
     { title: '책임연구자', dataIndex: 'inventor', width: 120, align: 'center' as const },
     { title: '소속', dataIndex: 'affiliation', width: 250, align: 'center' as const },

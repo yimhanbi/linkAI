@@ -4,7 +4,7 @@ from elasticsearch import AsyncElasticsearch
 import os
 import re
 
-router = APIRouter(prefix="/api/patents", tags=["특허 API"])
+router = APIRouter(tags=["특허 API"])
 
 def _parse_and_or_query(field: str, query_str: str):
     """
@@ -245,17 +245,47 @@ async def get_patents(
         else:
             search_query = {"match_all": {}}
 
+        # 하이라이팅할 필드 목록 생성
+        highlight_fields = {}
+        highlight_query = None
+        
+        # 검색 키워드가 있는 경우에만 하이라이팅 활성화
+        if tech_q or prod_q or desc_q or claim_q or inventor or manager or applicant:
+            highlight_fields = {
+                "title.ko": {"number_of_fragments": 0},  # 전체 텍스트 하이라이팅
+                "title.en": {"number_of_fragments": 0},
+                "abstract": {"number_of_fragments": 0},
+                "claims": {"number_of_fragments": 0},
+                "inventors.name": {"number_of_fragments": 0},
+                "applicant.name": {"number_of_fragments": 0}
+            }
+            # 하이라이팅 쿼리는 검색 쿼리와 동일하게 설정
+            highlight_query = search_query
+
         # Elasticsearch 실행
         response = await es.search(
             index="patents",
             query=search_query,
             from_=skip,
             size=limit,
-            sort=[{"_score": "desc"}]
+            sort=[{"_score": "desc"}],
+            highlight={
+                "fields": highlight_fields,
+                "pre_tags": ["<mark>"],
+                "post_tags": ["</mark>"],
+                "require_field_match": False  # 모든 필드에서 하이라이팅
+            } if highlight_fields else None
         )
 
         hits = response['hits']['hits']
-        patents = [hit['_source'] for hit in hits]
+        patents = []
+        for hit in hits:
+            patent = hit['_source'].copy()
+            # 하이라이팅 정보 추가
+            if 'highlight' in hit:
+                patent['_highlight'] = hit['highlight']
+            patents.append(patent)
+        
         total = response['hits']['total']['value']
 
         return {
