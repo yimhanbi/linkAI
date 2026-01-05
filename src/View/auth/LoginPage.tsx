@@ -4,13 +4,19 @@ import { authService } from '../../Service/authService';
 import './LoginPage.css'; 
 
 const LoginPage = () => {
+  const navigate = useNavigate();
   const [isSignIn, setIsSignIn] = useState(true);
+
+  // 1. 로그인용 상태
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const navigate = useNavigate();
+
+  // 2. 회원가입용 상태 추가 (백엔드 필드명: name, email, password)
+  const [signupName, setSignupName] = useState('');
+  const [signupEmail, setSignupEmail] = useState('');
+  const [signupPassword, setSignupPassword] = useState('');
 
   useEffect(() => {
-    // 접속 시 바로 sign-in 애니메이션이 작동하도록 설정
     const container = document.getElementById('container');
     if (container) container.classList.add('sign-in');
   }, []);
@@ -24,17 +30,41 @@ const LoginPage = () => {
     }
   };
 
+  // 로그인 로직
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       const data = await authService.login(email, password);
       localStorage.setItem('token', data.access_token);
-      // authChange 이벤트 발생시켜 AppRouter의 상태 갱신
       window.dispatchEvent(new Event('authChange'));
       alert('로그인 성공!');
-      navigate('/advanced-search'); // 로그인 후 메인(검색) 페이지로 이동
+      navigate('/advanced-search');
     } catch (error) {
       alert('로그인 실패: 정보를 확인해주세요.');
+    }
+  };
+
+  // 3. 회원가입 로직 추가
+  const handleSignup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      // 백엔드가 요구하는 JSON 구조 전송
+      await authService.signup({
+        name: signupName,
+        email: signupEmail,
+        password: signupPassword,
+        role: "user" // 기본값 설정
+      });
+      alert('회원가입 성공! 이제 로그인해주세요.');
+      toggle(); // 성공 시 로그인 폼으로 전환
+      
+      // 가입 필드 초기화
+      setSignupName('');
+      setSignupEmail('');
+      setSignupPassword('');
+    } catch (error: any) {
+      const msg = error.response?.data?.detail || '회원가입 실패';
+      alert(msg);
     }
   };
 
@@ -44,34 +74,53 @@ const LoginPage = () => {
         {/* SIGN UP SECTION */}
         <div className="col align-items-center flex-col sign-up">
           <div className="form-wrapper align-items-center">
-            <div className="form sign-up">
+            {/* 4. form 태그와 onSubmit 연결 */}
+            <form className="form sign-up" onSubmit={handleSignup}>
               <div className="input-group">
                 <i className='bx bxs-user'></i>
-                <input type="text" placeholder="Username" />
+                <input 
+                  type="text" 
+                  placeholder="User name" 
+                  value={signupName}
+                  onChange={(e) => setSignupName(e.target.value)}
+                  required 
+                />
               </div>
               <div className="input-group">
-                <i className='bx bx-mail-send'></i>
-                <input type="email" placeholder="Email" />
+                <i className='bx bxs-envelope'></i>
+                <input 
+                  type="email" 
+                  placeholder="Email" 
+                  value={signupEmail}
+                  onChange={(e) => setSignupEmail(e.target.value)}
+                  required 
+                />
               </div>
               <div className="input-group">
                 <i className='bx bxs-lock-alt'></i>
-                <input type="password" placeholder="Password" />
+                <input 
+                  type="password" 
+                  placeholder="Password" 
+                  value={signupPassword}
+                  onChange={(e) => setSignupPassword(e.target.value)}
+                  required 
+                />
               </div>
-              <button onClick={() => alert('회원가입 기능 준비 중')}>Sign up</button>
+              <button type="submit">Sign up</button>
               <p>
                 <span>Already have an account?</span>
                 <b onClick={toggle} className="pointer"> Sign in here</b>
               </p>
-            </div>
+            </form>
           </div>
         </div>
 
-        {/* 회원가입 */}
+        {/* SIGN IN SECTION */}
         <div className="col align-items-center flex-col sign-in">
           <div className="form-wrapper align-items-center">
             <form className="form sign-in" onSubmit={handleLogin}>
               <div className="input-group">
-                <i className='bx bxs-user'></i>
+                <i className='bx bxs-envelope'></i> {/* 아이콘 통일 */}
                 <input 
                   type="email" 
                   placeholder="Email" 
@@ -101,7 +150,7 @@ const LoginPage = () => {
         </div>
       </div>
 
-      {/* CONTENT SECTION */}
+      {/* CONTENT SECTION  */}
       <div className="row content-row">
         <div className="col align-items-center flex-col">
           <div className="text sign-in">
