@@ -66,5 +66,7 @@ async def login(user_data: UserLogin):
     return {
         "access_token": access_token, 
         "token_type": "bearer",
+        "role": user.get("role", "user"),
+        "name": user.get("name","사용자"),
         "message": "로그인 성공!"
     }

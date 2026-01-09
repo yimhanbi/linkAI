@@ -3,8 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware # 1. 미들웨어 추가
 from fastapi.staticfiles import StaticFiles
 import os 
 from backend.database import db_manager
-from backend.routes import patents
-from backend.routes import patents, auth 
+from backend.routes import patents, auth, chatbot
 
 app = FastAPI(title="LinkAI 서비스 API")
 
@@ -37,6 +36,10 @@ async def shutdown():
 # 라우터 연결
 app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
 app.include_router(patents.router, prefix="/api/patents", tags=["Patents"])
+
+
+#챗봇 추가 
+app.include_router(chatbot.router, prefix="/api/chatbot", tags=["Chatbot"])
 
 @app.get("/")
 async def index():

@@ -10,69 +10,6 @@ import PatentAdvancedSearchModal from './PatentAdvancedSearchModal';
 
 const { Title, Text } = Typography;
 
-// 하이라이팅 텍스트를 React 요소로 변환하는 유틸리티 함수
-const renderHighlightedText = (
-  text: string | { ko?: string; en?: string } | null, 
-  highlight?: string[] | string
-): React.ReactNode => {
-  if (!text) return '-';
-  
-  // highlight가 배열인 경우 첫 번째 요소 사용, 문자열이면 그대로 사용
-  const highlightText = Array.isArray(highlight) ? highlight[0] : highlight;
-  
-  // 객체 형태인 경우 (title.ko, title.en)
-  if (typeof text === 'object' && text !== null) {
-    const koText = text.ko || '';
-    const enText = text.en || '';
-    
-    // highlight 객체에서 해당 필드 찾기
-    let koHighlight: string | undefined;
-    let enHighlight: string | undefined;
-    
-    if (Array.isArray(highlight)) {
-      // 배열에서 찾기 (Elasticsearch는 필드별로 배열 반환)
-      koHighlight = highlight.find(h => h && typeof h === 'string') || undefined;
-      enHighlight = highlight.find(h => h && typeof h === 'string') || undefined;
-    } else if (typeof highlight === 'string') {
-      // 문자열인 경우 한국어/영어 구분 없이 사용
-      koHighlight = highlight;
-      enHighlight = highlight;
-    }
-    
-    return (
-      <div>
-        {koText && (
-          <div>
-            {koHighlight ? (
-              <span dangerouslySetInnerHTML={{ __html: koHighlight }} />
-            ) : (
-              <span>{koText}</span>
-            )}
-          </div>
-        )}
-        {enText && (
-          <div style={{ fontSize: '0.9em', color: 'var(--text-sub)', marginTop: '4px' }}>
-            {enHighlight ? (
-              <span dangerouslySetInnerHTML={{ __html: enHighlight }} />
-            ) : (
-              <span>{enText}</span>
-            )}
-          </div>
-        )}
-      </div>
-    );
-  }
-  
-  // 문자열 형태인 경우
-  const textStr = String(text);
-  
-  if (highlightText) {
-    return <span dangerouslySetInnerHTML={{ __html: highlightText }} />;
-  }
-  
-  return <span>{textStr}</span>;
-};
-
 export default function AdvancedSearchPage() {
   const [form] = Form.useForm();
   const { theme: appTheme } = useContext(ThemeContext);
@@ -94,7 +31,6 @@ export default function AdvancedSearchPage() {
   const [isPdfOpen, setIsPdfOpen] = useState(false);
   const [currentPatent, setCurrentPatent] = useState<any | null>(null);
   const [isAdvModalOpen, setIsAdvModalOpen] = useState(false); 
-  const [selectedPatent, setSelectedPatent] = useState<any>(null);
 
   // --- 탭 데이터 필터링 ---
   const filteredData = useMemo(() => {

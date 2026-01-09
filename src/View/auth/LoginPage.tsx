@@ -35,7 +35,13 @@ const LoginPage = () => {
     e.preventDefault();
     try {
       const data = await authService.login(email, password);
+      
+      //토큰과 함께 role 정보를 localStorage에 저장함
       localStorage.setItem('token', data.access_token);
+      localStorage.setItem('role',data.role);
+      localStorage.setItem('name',data.name);
+      localStorage.setItem('email',email);
+
       window.dispatchEvent(new Event('authChange'));
       alert('로그인 성공!');
       navigate('/advanced-search');

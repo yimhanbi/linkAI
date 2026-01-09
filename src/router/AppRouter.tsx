@@ -47,6 +47,8 @@ export default function AppRouter() {
       <Route element={isLoggedIn ? <MainLayout /> : <Navigate to="/login" replace />}>
         {/* 상세 검색 페이지 */}
         <Route path="/advanced-search" element={<AdvancedSearchPage />} />
+        {/* 챗봇 페이지 (실제 UI는 MainLayout의 ChatbotContainer가 담당) */}
+        <Route path="/chatbot" element={<div />} />
         
         {/* 추후 추가될 챗봇 등의 페이지는 여기에 계속 추가 */}
       </Route>

@@ -19,12 +19,14 @@
     "clsx": "^2.1.1",
     "lucide-react": "^0.561.0",
     "react": "^19.2.0",
+    "react-chatbot-kit": "^2.2.2",
     "react-device-detect": "^2.2.3",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.10.1",
     "styled-components": "^6.1.19",
     "tailwind-merge": "^2.6.0",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "zustand": "^5.0.9"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

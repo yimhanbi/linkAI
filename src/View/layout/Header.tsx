@@ -5,14 +5,17 @@ import { ThemeContext } from "../../shared/theme/ThemeContext";
 const Header = () => {
   const { toggleTheme, theme } = useContext(ThemeContext);
   const navigate = useNavigate();
-  
-  // 드롭다운 상태 및 참조
+
+  // 1. 누락되었던 상태(State)와 참조(Ref) 정의 추가
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  // 2. localStorage에서 실시간으로 이름과 이메일 가져오기
+  const userName = localStorage.getItem('name') || '사용자';
+  const userEmail = localStorage.getItem('email') || '이메일 정보 없음';
   const isLoggedIn = !!localStorage.getItem("token");
 
-  // 외부 클릭 시 드롭다운 닫기
+  // 외부 클릭 시 드롭다운 닫기 로직
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -25,6 +28,9 @@ const Header = () => {
 
   const handleLogout = () => {
     localStorage.removeItem("token");
+    localStorage.removeItem("role"); // role도 함께 삭제 권장
+    localStorage.removeItem("name"); // name도 삭제
+    localStorage.removeItem("email"); // email도 삭제
     window.dispatchEvent(new Event('authChange'));
     alert("로그아웃 되었습니다.");
     setIsMenuOpen(false);
@@ -59,8 +65,13 @@ const Header = () => {
             {isMenuOpen && (
               <div style={dropdownMenuStyle}>
                 <div style={{ padding: "12px 16px" }}>
-                  <div style={{ fontWeight: "bold", fontSize: "14px", color: "var(--text)" }}>성공이23</div>
-                  <div style={{ fontSize: "12px", color: "gray" }}>test1@gmail.com</div>
+                  {/* 3. 하드코딩 대신 변수 적용 */}
+                  <div style={{ fontWeight: "bold", fontSize: "14px", color: "var(--text)" }}>
+                    {userName}
+                  </div>
+                  <div style={{ fontSize: "12px", color: "gray" }}>
+                    {userEmail}
+                  </div>
                 </div>
                 <div style={dividerStyle} />
                 <div style={menuItemStyle} onClick={() => {navigate('/settings'); setIsMenuOpen(false);}}>Settings</div>
@@ -84,7 +95,7 @@ const Header = () => {
   );
 };
 
-// --- 스타일 정의 ---
+// --- 스타일 정의 (기존과 동일) ---
 const headerContainerStyle: React.CSSProperties = {
   position: "sticky",
   top: 0,
