@@ -38,5 +38,10 @@ venv.bak/
 dist/
 build/
 
+
 # Backend storage (PDF files)
 backend/storage/
+
+# Environment variables (secrets)
+.env
+backend/.env
