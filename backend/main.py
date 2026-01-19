@@ -24,11 +24,16 @@ backend_dir: Path = Path(__file__).resolve().parent
 default_pdf_dir: str = str(backend_dir / "storage" / "pdfs")
 PDF_DIR: str = os.getenv("PDF_DIR", default_pdf_dir)
 
-# 폴더가 존재하는지 확인 (디버깅용)
-if not os.path.exists(PDF_DIR):
-    print(f"⚠️ 경고: PDF 폴더를 찾을 수 없습니다: {PDF_DIR}")
+# 폴더가 없으면 생성 (Docker/배포 환경에서 PDF를 별도로 마운트하는 경우가 많음)
+try:
+    os.makedirs(PDF_DIR, exist_ok=True)
+except Exception as e:
+    print(f"⚠️ PDF 폴더 생성 실패: {PDF_DIR} ({e})")
 
-app.mount("/static/pdfs", StaticFiles(directory=PDF_DIR), name="static_pdfs")
+if os.path.isdir(PDF_DIR):
+    app.mount("/static/pdfs", StaticFiles(directory=PDF_DIR), name="static_pdfs")
+else:
+    print(f"⚠️ 경고: PDF 폴더를 찾을 수 없습니다: {PDF_DIR}")
 
 @app.on_event("startup")
 async def startup():
