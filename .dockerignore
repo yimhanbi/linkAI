@@ -1,0 +1,16 @@
+.git
+.gitignore
+
+**/__pycache__/
+**/*.py[cod]
+
+backend/storage/pdfs/
+backend/.env
+backend/.env.*
+
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.*
+
+**/*.log

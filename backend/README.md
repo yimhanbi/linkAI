@@ -32,3 +32,20 @@ cd backend
 PYTHONPATH=.. uvicorn backend.main:app --reload
 ```
 
+## Docker (local)
+
+From repo root:
+
+```bash
+docker compose up --build
+```
+
+Required env vars (set in your shell or Railway variables):
+
+- `MONGODB_URI` (or `MONGO_URI`)
+- `ELASTICSEARCH_URL`
+- `OPENAI_API_KEY`
+- `QDRANT_URL`
+- `QDRANT_API_KEY`
+- Optional: `PDF_DIR`
+

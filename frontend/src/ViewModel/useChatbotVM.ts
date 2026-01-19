@@ -1,12 +1,13 @@
 import { create } from 'zustand';
 import axios from 'axios';
+import { API_BASE_URL } from '@/Service/apiBaseUrl';
 
 // 🔹 백엔드 API 서비스 정의 (기존 코드의 chatService 역할)
 const chatService = {
   sendMessage: async (message: string): Promise<string> => {
     try {
       // main.py에서 설정한 라우터 경로에 맞춰 호출
-      const response = await axios.post('http://localhost:8000/api/chatbot/ask', {
+      const response = await axios.post(`${API_BASE_URL}/api/chatbot/ask`, {
         query: message,
       });
 

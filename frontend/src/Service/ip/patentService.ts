@@ -1,5 +1,6 @@
 import axios from "axios";
 import type { AxiosInstance } from "axios";
+import { API_BASE_URL } from "@/Service/apiBaseUrl";
 
 export interface FetchPatentsParams {
   tech_q?: string;
@@ -25,7 +26,7 @@ export interface PatentSearchResponse {
 }
 
 const apiClient: AxiosInstance = axios.create({
-  baseURL: "http://127.0.0.1:8000",
+  baseURL: API_BASE_URL,
   timeout: 30000
 });
 

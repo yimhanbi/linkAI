@@ -45,8 +45,9 @@ def _parse_and_or_query(field: str, query_str: str):
     return {"match": {field: query_str}}
 
 # Elasticsearch 클라이언트 설정
+elasticsearch_url = os.getenv("ELASTICSEARCH_URL", "http://127.0.0.1:9200")
 es = AsyncElasticsearch(
-    "http://127.0.0.1:9200",
+    elasticsearch_url,
     verify_certs=False,
     ssl_show_warn=False,
     request_timeout=30

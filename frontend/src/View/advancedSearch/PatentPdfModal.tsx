@@ -1,5 +1,6 @@
 import React from 'react';
 import { Modal, Result, Button } from 'antd';
+import { API_BASE_URL } from '@/Service/apiBaseUrl';
 
 interface PatentPdfModalProps {
   isOpen: boolean;
@@ -10,7 +11,7 @@ interface PatentPdfModalProps {
 
 const PatentPdfModal: React.FC<PatentPdfModalProps> = ({ isOpen, onClose, appNo, pdfPath }) => {
   // 백엔드 서버 주소 (FastAPI 8000 포트 기준)
-  const BASE_URL = "http://localhost:8000";
+  const BASE_URL: string = API_BASE_URL;
   
   // 전체 URL 조합
   const fullPdfUrl = pdfPath ? `${BASE_URL}${pdfPath}` : null;

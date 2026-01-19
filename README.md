@@ -11,6 +11,33 @@ Each side has its own README:
 - `frontend/README.md`
 - `backend/README.md`
 
+## Deploy on Railway (Docker)
+
+This repo is a monorepo (two services). Create **two Railway Services**, both from the same GitHub repo:
+
+### 1) Backend service (FastAPI)
+
+- **Builder**: Dockerfile
+- **Dockerfile path**: `backend/Dockerfile`
+- **Port**: Railway provides `PORT` automatically (the container uses it)
+- **Variables** (set in Railway):
+  - `MONGODB_URI` (or `MONGO_URI`)
+  - `DB_NAME` (optional)
+  - `ELASTICSEARCH_URL`
+  - `OPENAI_API_KEY`
+  - `QDRANT_URL`
+  - `QDRANT_API_KEY`
+  - `SECRET_KEY` (recommended)
+  - `PDF_DIR` (optional; default is `/app/backend/storage/pdfs`)
+
+### 2) Frontend service (Vite build + static serve)
+
+- **Builder**: Dockerfile
+- **Dockerfile path**: `frontend/Dockerfile`
+- **Build arg**:
+  - `VITE_BACKEND_URL` = your backend public URL (e.g. `https://<backend>.up.railway.app`)
+- **Port**: Railway provides `PORT` automatically (the container uses it)
+
 ## 주요 기여 사항
 
 - **고성능 검색 엔진**: Elasticsearch 기반의 실시간 특허 검색 시스템 구축
