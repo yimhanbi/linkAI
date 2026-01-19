@@ -1,2 +1,4 @@
-echo ".env" >> backend/.gitignore
-echo "__pycache__/" >> backend/.gitignore
+.env
+.env.*
+__pycache__/
+*.py[cod]

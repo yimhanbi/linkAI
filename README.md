@@ -6,6 +6,10 @@ React + TypeScript + Vite 기반의 특허 검색 및 분석 플랫폼으로, El
 
 - Frontend: `frontend/` (React + Vite) — see `frontend/README.md`
 - Backend: `backend/` (FastAPI) — see `backend/README.md`
+Each side has its own README:
+
+- `frontend/README.md`
+- `backend/README.md`
 
 ## 주요 기여 사항
 
