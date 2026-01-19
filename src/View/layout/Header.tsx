@@ -99,7 +99,7 @@ const Header = () => {
 const headerContainerStyle: React.CSSProperties = {
   position: "sticky",
   top: 0,
-  zIndex: 10,
+  zIndex: 2000,
   height: 56,
   display: "flex",
   alignItems: "center",
@@ -129,7 +129,7 @@ const dropdownMenuStyle: React.CSSProperties = {
   borderRadius: "12px",
   boxShadow: "0 10px 25px rgba(0,0,0,0.15)",
   border: "1px solid var(--border)",
-  zIndex: 1000,
+  zIndex: 2100,
   overflow: "hidden"
 };
 

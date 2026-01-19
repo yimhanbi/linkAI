@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware # 1. 미들웨어 추가
 from fastapi.staticfiles import StaticFiles
 import os 
 from backend.database import db_manager
-from backend.routes import patents, auth, chatbot
+from backend.routes import patents, auth, chatbot 
 
 app = FastAPI(title="LinkAI 서비스 API")
 
@@ -15,6 +15,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
 
 # 3. 정적 파일(PDF) 경로 설정 추가
 PDF_DIR = "/Users/imhanbi/dev/linkai/backend/storage/pdfs"
@@ -28,6 +30,9 @@ app.mount("/static/pdfs", StaticFiles(directory=PDF_DIR), name="static_pdfs")
 @app.on_event("startup")
 async def startup():
     db_manager.connect()
+    # 챗봇 엔진 초기화는 지연 로드 (네트워크 문제 시 서버 시작 방지)
+    # 첫 요청 시 자동으로 초기화됨
+    print("모든 서비스가 준비되었습니다.")
 
 @app.on_event("shutdown")
 async def shutdown():
