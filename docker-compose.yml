@@ -1,11 +1,26 @@
 services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
   backend:
     build:
       context: .
       dockerfile: backend/Dockerfile
+    depends_on:
+      - mongo
+    env_file:
+      - backend/.env
     environment:
       - PORT=8000
       - PDF_DIR=/app/backend/storage/pdfs
+      # Local default: use the docker-compose MongoDB container
+      - MONGO_URI=mongodb://mongo:27017
+      - DB_NAME=moaai_db
       # Set these in a local env file or your shell:
       # - MONGODB_URI=...
       # - OPENAI_API_KEY=...
@@ -28,3 +43,5 @@ services:
     depends_on:
       - backend
 
+volumes:
+  mongo_data:
