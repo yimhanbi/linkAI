@@ -10,14 +10,14 @@ app = FastAPI(title="LinkAI 서비스 API")
 
 # 2. CORS 설정 추가 (라우터 연결보다 반드시 위에 위치!)
 cors_origins_raw: str = os.getenv("CORS_ORIGINS", "")
-cors_origins: list[str] = [origin.strip() for origin in cors_origins_raw.split(",") if origin.strip()]
-if len(cors_origins) == 0:
-    cors_origins = [
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "https://linkai-dev.vercel.app",
-        "https://linkai-rho.vercel.app",
-    ]
+default_cors_origins: list[str] = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://linkai-dev.vercel.app",
+    "https://linkai-rho.vercel.app",
+]
+cors_origins_from_env: list[str] = [origin.strip() for origin in cors_origins_raw.split(",") if origin.strip()]
+cors_origins: list[str] = sorted(set(default_cors_origins + cors_origins_from_env))
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
