@@ -59,6 +59,34 @@ React + TypeScript + Vite 기반의 특허 검색 및 분석 플랫폼으로, El
 - **Git**: 버전 관리
 
 
+<<<<<<< HEAD
+=======
+```
+linkai/
+├── backend/                    # 백엔드 서버 (FastAPI)
+│   ├── main.py                 # FastAPI 애플리케이션 진입점
+│   ├── database.py             # MongoDB 연결 관리
+│   ├── routes/                 # API 라우터
+│   │   └── patents.py          # 특허 검색 API
+│   ├── scripts/                # 데이터 변환 스크립트
+│   │   └── transform_patents.py
+│   ├── services/               # 비즈니스 로직
+│   │   └── search_service.py
+│   ├── storage/                # PDF 파일 저장소
+│   │   └── pdfs/
+│   ├── sync_es.py              # Elasticsearch 동기화
+│   └── update_pdf_paths.py     # PDF 경로 업데이트 스크립트
+│
+├── frontend/                   # 프론트엔드 (React + Vite)
+│   ├── src/                    # 프론트엔드 소스
+│   ├── public/                 # 정적 파일
+│   ├── package.json            # 프론트엔드 의존성
+│   ├── vite.config.ts          # Vite 설정
+│   └── tsconfig*.json          # TypeScript 설정
+│
+└── README.md                   # 프로젝트 문서
+```
+>>>>>>> 4aad654 (chore: split frontend into frontend directory)
 
 ## PDF 파일 관리
 
@@ -107,6 +135,7 @@ React + TypeScript + Vite 기반의 특허 검색 및 분석 플랫폼으로, El
 
 1. **프론트엔드 설정**:
    ```bash
+   cd frontend
    npm install
    npm run dev
    ```
