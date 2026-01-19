@@ -10,11 +10,11 @@ class MongoDB:
         self.db = None
 
     def connect(self):
-        mongo_uri = os.getenv("MONGO_URI")
+        mongo_uri = os.getenv("MONGODB_URI") or os.getenv("MONGO_URI")
         db_name = os.getenv("DB_NAME")
         
         if not mongo_uri:
-            print("⚠️  MONGO_URI 환경 변수가 설정되지 않았습니다. 기본값을 사용합니다.")
+            print("⚠️  MONGODB_URI/MONGO_URI 환경 변수가 설정되지 않았습니다. 기본값을 사용합니다.")
             mongo_uri = "mongodb://localhost:27017"
         
         if not db_name:
