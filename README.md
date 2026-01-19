@@ -2,6 +2,11 @@
 
 React + TypeScript + Vite 기반의 특허 검색 및 분석 플랫폼으로, Elasticsearch를 활용한 고성능 검색 엔진과 MongoDB를 통한 데이터 관리 기능을 제공합니다.
 
+## Repository layout
+
+- Frontend: `frontend/` (React + Vite) — see `frontend/README.md`
+- Backend: `backend/` (FastAPI) — see `backend/README.md`
+
 ## 주요 기여 사항
 
 - **고성능 검색 엔진**: Elasticsearch 기반의 실시간 특허 검색 시스템 구축
@@ -57,36 +62,6 @@ React + TypeScript + Vite 기반의 특허 검색 및 분석 플랫폼으로, El
 - **ESLint**: 코드 품질 관리
 - **TypeScript ESLint**: TypeScript 린팅
 - **Git**: 버전 관리
-
-
-<<<<<<< HEAD
-=======
-```
-linkai/
-├── backend/                    # 백엔드 서버 (FastAPI)
-│   ├── main.py                 # FastAPI 애플리케이션 진입점
-│   ├── database.py             # MongoDB 연결 관리
-│   ├── routes/                 # API 라우터
-│   │   └── patents.py          # 특허 검색 API
-│   ├── scripts/                # 데이터 변환 스크립트
-│   │   └── transform_patents.py
-│   ├── services/               # 비즈니스 로직
-│   │   └── search_service.py
-│   ├── storage/                # PDF 파일 저장소
-│   │   └── pdfs/
-│   ├── sync_es.py              # Elasticsearch 동기화
-│   └── update_pdf_paths.py     # PDF 경로 업데이트 스크립트
-│
-├── frontend/                   # 프론트엔드 (React + Vite)
-│   ├── src/                    # 프론트엔드 소스
-│   ├── public/                 # 정적 파일
-│   ├── package.json            # 프론트엔드 의존성
-│   ├── vite.config.ts          # Vite 설정
-│   └── tsconfig*.json          # TypeScript 설정
-│
-└── README.md                   # 프로젝트 문서
-```
->>>>>>> 4aad654 (chore: split frontend into frontend directory)
 
 ## PDF 파일 관리
 
@@ -144,11 +119,13 @@ linkai/
    ```bash
    cd backend
    pip install -r requirements.txt
-   uvicorn main:app --reload
+   cd ..
+   uvicorn backend.main:app --reload
    ```
 
 3. **환경 변수 설정**:
-   - `.env` 파일에 MongoDB URI 및 기타 설정 추가
+   - Backend: `backend/.env`에 `MONGODB_URI` 및 기타 설정 추가
+   - Frontend: 필요 시 `frontend/.env.local` 사용
 
 ## 라이선스
 
