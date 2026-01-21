@@ -3,8 +3,26 @@ from fastapi.middleware.cors import CORSMiddleware # 1. 미들웨어 추가
 from fastapi.staticfiles import StaticFiles
 import os 
 from pathlib import Path
+import logging
 from backend.database import db_manager
 from backend.routes import patents, auth, chatbot 
+
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(
+    level=LOG_LEVEL,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+
+# Hide very noisy third-party DEBUG logs (MongoDB driver, http client) by default.
+# Set QUIET_THIRD_PARTY_LOGS=false to see them again.
+quiet_third_party_logs_env: str = (os.getenv("QUIET_THIRD_PARTY_LOGS") or "true").strip().lower()
+should_quiet_third_party_logs: bool = quiet_third_party_logs_env in ["1", "true", "yes", "y", "on"]
+if should_quiet_third_party_logs:
+    logging.getLogger("pymongo").setLevel(logging.WARNING)
+    logging.getLogger("pymongo.topology").setLevel(logging.WARNING)
+    logging.getLogger("pymongo.connection").setLevel(logging.WARNING)
+    logging.getLogger("motor").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
 
 app = FastAPI(title="LinkAI 서비스 API")
 

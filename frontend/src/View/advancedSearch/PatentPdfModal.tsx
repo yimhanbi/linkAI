@@ -21,6 +21,7 @@ const PatentPdfModal: React.FC<PatentPdfModalProps> = ({ isOpen, onClose, appNo,
       title={`특허공보 PDF - ${appNo || ''}`}
       open={isOpen}
       onCancel={onClose}
+      zIndex={3000}
       width="95%"
       style={{ top: 20 }}
       footer={null}

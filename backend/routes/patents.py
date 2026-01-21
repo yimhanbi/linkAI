@@ -3,8 +3,12 @@ from typing import Optional, List
 from elasticsearch import AsyncElasticsearch
 import os
 import re
+import logging
+import time
+import uuid
 
 router = APIRouter(tags=["특허 API"])
+logger = logging.getLogger(__name__)
 
 def _parse_and_or_query(field: str, query_str: str):
     """
@@ -12,6 +16,8 @@ def _parse_and_or_query(field: str, query_str: str):
     """
     if not query_str or not query_str.strip():
         return None
+    original_query: str = query_str
+    logger.debug("parse_query field=%s query=%r", field, original_query)
     
     # OR 연산자가 있는 경우
     if ' OR ' in query_str.upper() or ' or ' in query_str:
@@ -19,6 +25,7 @@ def _parse_and_or_query(field: str, query_str: str):
         terms = re.split(r'\s+OR\s+', query_str, flags=re.IGNORECASE)
         terms = [t.strip() for t in terms if t.strip()]
         if len(terms) > 1:
+            logger.debug("parse_query_or field=%s terms=%r", field, terms)
             return {
                 "bool": {
                     "should": [
@@ -33,6 +40,7 @@ def _parse_and_or_query(field: str, query_str: str):
         terms = re.split(r'\s+AND\s+', query_str, flags=re.IGNORECASE)
         terms = [t.strip() for t in terms if t.strip()]
         if len(terms) > 1:
+            logger.debug("parse_query_and field=%s terms=%r", field, terms)
             return {
                 "bool": {
                     "must": [
@@ -42,6 +50,7 @@ def _parse_and_or_query(field: str, query_str: str):
             }
     
     # 연산자가 없는 경우 기본 match 쿼리
+    logger.debug("parse_query_single field=%s term=%r", field, original_query.strip())
     return {"match": {field: query_str}}
 
 # Elasticsearch 클라이언트 설정
@@ -68,9 +77,32 @@ async def get_patents(
     page: int = 1, 
     limit: int = 10
 ):
+    request_id: str = uuid.uuid4().hex[:10]
+    start_time_s: float = time.perf_counter()
     try:
         skip = (page - 1) * limit
         must_queries = []
+        logger.info(
+            "patents_search_start request_id=%s page=%d limit=%d skip=%d",
+            request_id,
+            page,
+            limit,
+            skip,
+        )
+        logger.debug(
+            "patents_search_params request_id=%s tech_q=%r prod_q=%r desc_q=%r claim_q=%r inventor=%r manager=%r applicant=%r app_num=%r reg_num=%r status=%r",
+            request_id,
+            tech_q,
+            prod_q,
+            desc_q,
+            claim_q,
+            inventor,
+            manager,
+            applicant,
+            app_num,
+            reg_num,
+            status,
+        )
 
         # 기술 키워드 검색 (발명의 명칭, AND/OR 연산자 지원)
         if tech_q:
@@ -79,6 +111,7 @@ async def get_patents(
                 terms = re.split(r'\s+OR\s+', tech_q, flags=re.IGNORECASE)
                 terms = [t.strip() for t in terms if t.strip()]
                 if len(terms) > 1:
+                    logger.debug("tech_q_or request_id=%s terms=%r", request_id, terms)
                     must_queries.append({
                         "bool": {
                             "should": [
@@ -106,6 +139,7 @@ async def get_patents(
                 terms = re.split(r'\s+AND\s+', tech_q, flags=re.IGNORECASE)
                 terms = [t.strip() for t in terms if t.strip()]
                 if len(terms) > 1:
+                    logger.debug("tech_q_and request_id=%s terms=%r", request_id, terms)
                     must_queries.append({
                         "bool": {
                             "must": [
@@ -129,6 +163,7 @@ async def get_patents(
                     })
             else:
                 # 연산자 없음
+                logger.debug("tech_q_single request_id=%s query=%r", request_id, tech_q)
                 must_queries.append({
                     "multi_match": {
                         "query": tech_q,
@@ -143,6 +178,7 @@ async def get_patents(
                 terms = re.split(r'\s+OR\s+', prod_q, flags=re.IGNORECASE)
                 terms = [t.strip() for t in terms if t.strip()]
                 if len(terms) > 1:
+                    logger.debug("prod_q_or request_id=%s terms=%r", request_id, terms)
                     must_queries.append({
                         "bool": {
                             "should": [
@@ -167,6 +203,7 @@ async def get_patents(
                 terms = re.split(r'\s+AND\s+', prod_q, flags=re.IGNORECASE)
                 terms = [t.strip() for t in terms if t.strip()]
                 if len(terms) > 1:
+                    logger.debug("prod_q_and request_id=%s terms=%r", request_id, terms)
                     must_queries.append({
                         "bool": {
                             "must": [
@@ -187,6 +224,7 @@ async def get_patents(
                         }
                     })
             else:
+                logger.debug("prod_q_single request_id=%s query=%r", request_id, prod_q)
                 must_queries.append({
                     "multi_match": {
                         "query": prod_q,
@@ -198,42 +236,50 @@ async def get_patents(
         if desc_q:
             desc_query = _parse_and_or_query("abstract", desc_q)
             if desc_query:
+                logger.debug("desc_q_parsed request_id=%s query=%s", request_id, desc_query)
                 must_queries.append(desc_query)
 
         # 청구범위 키워드 검색
         if claim_q:
             claim_query = _parse_and_or_query("claims", claim_q)
             if claim_query:
+                logger.debug("claim_q_parsed request_id=%s query=%s", request_id, claim_query)
                 must_queries.append(claim_query)
 
         # 발명자 검색 (AND/OR 연산자 지원)
         if inventor:
             inventor_query = _parse_and_or_query("inventors.name", inventor)
             if inventor_query:
+                logger.debug("inventor_parsed request_id=%s query=%s", request_id, inventor_query)
                 must_queries.append(inventor_query)
         
         # 책임연구자 검색 (AND/OR 연산자 지원)
         if manager:
             manager_query = _parse_and_or_query("inventors.name", manager)
             if manager_query:
+                logger.debug("manager_parsed request_id=%s query=%s", request_id, manager_query)
                 must_queries.append(manager_query)
         
         # 출원인 검색 (AND/OR 연산자 지원)
         if applicant:
             applicant_query = _parse_and_or_query("applicant.name", applicant)
             if applicant_query:
+                logger.debug("applicant_parsed request_id=%s query=%s", request_id, applicant_query)
                 must_queries.append(applicant_query)
         
         # 출원번호 검색
         if app_num:
+            logger.debug("app_num_match request_id=%s app_num=%r", request_id, app_num)
             must_queries.append({"match": {"applicationNumber": app_num}})
         
         # 등록번호 검색
         if reg_num:
+            logger.debug("reg_num_match request_id=%s reg_num=%r", request_id, reg_num)
             must_queries.append({"match": {"registrationNumber": reg_num}})
 
         # 법적 상태 필터링
         if status and len(status) > 0:
+            logger.debug("status_terms request_id=%s status=%r", request_id, status)
             must_queries.append({
                 "terms": {
                     "status": status
@@ -245,6 +291,7 @@ async def get_patents(
             search_query = {"bool": {"must": must_queries}}
         else:
             search_query = {"match_all": {}}
+        logger.debug("es_query request_id=%s query=%s", request_id, search_query)
 
         # 하이라이팅할 필드 목록 생성
         highlight_fields = {}
@@ -264,6 +311,7 @@ async def get_patents(
             highlight_query = search_query
 
         # Elasticsearch 실행
+        es_start_time_s: float = time.perf_counter()
         response = await es.search(
             index="patents",
             query=search_query,
@@ -277,8 +325,10 @@ async def get_patents(
                 "require_field_match": False  # 모든 필드에서 하이라이팅
             } if highlight_fields else None
         )
+        es_elapsed_ms: float = (time.perf_counter() - es_start_time_s) * 1000.0
 
         hits = response['hits']['hits']
+        logger.debug("es_result request_id=%s hits=%d elapsed_ms=%.1f", request_id, len(hits), es_elapsed_ms)
         patents = []
         for hit in hits:
             patent = hit['_source'].copy()
@@ -288,6 +338,14 @@ async def get_patents(
             patents.append(patent)
         
         total = response['hits']['total']['value']
+        total_elapsed_ms: float = (time.perf_counter() - start_time_s) * 1000.0
+        logger.info(
+            "patents_search_done request_id=%s total=%d returned=%d elapsed_ms=%.1f",
+            request_id,
+            total,
+            len(patents),
+            total_elapsed_ms,
+        )
 
         return {
             "total": total,
@@ -298,7 +356,7 @@ async def get_patents(
         }
 
     except Exception as e:
-        print(f"❌ 검색 에러 발생: {e}")
+        logger.exception("patents_search_error request_id=%s err=%r", request_id, e)
         # 에러 발생 시 500 에러 반환
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -20,13 +20,11 @@ class ActionProvider {
   private readonly createChatBotMessage: CreateChatBotMessage;
   private readonly setState: SetChatbotState;
   private loadingIntervalId: number | null;
-  private typingIntervalId: number | null;
 
   constructor(createChatBotMessage: CreateChatBotMessage, setStateFunc: SetChatbotState) {
     this.createChatBotMessage = createChatBotMessage;
     this.setState = setStateFunc;
     this.loadingIntervalId = null;
-    this.typingIntervalId = null;
   }
 
   greet = (): void => {
@@ -45,10 +43,8 @@ class ActionProvider {
       const response: string = await getBotResponse(message);
       this.clearIntervals();
       this.removeMessage(progressMessageId);
-      const typingMessage: ChatMessage = this.createChatBotMessage("");
-      this.updateChatbotState(typingMessage);
-      this.setMessageLoading(typingMessage.id, false);
-      this.startTypingEffect(typingMessage.id, response);
+      const botMessage: ChatMessage = this.createChatBotMessage(response);
+      this.updateChatbotState(botMessage);
     } catch (error) {
       this.clearIntervals();
       this.removeMessage(progressMessageId);
@@ -93,53 +89,12 @@ class ActionProvider {
     this.loadingIntervalId = window.setInterval(tick, 2000);
   };
 
-  private startTypingEffect = (messageId: number, fullText: string): void => {
-    const targetTotalTypingDurationMs: number = 20000;
-    const minTypingDelayMs: number = 12;
-    const maxTypingDelayMs: number = 90;
-    const safeLength: number = Math.max(fullText.length, 1);
-    const computedTypingDelayMs: number = Math.floor(targetTotalTypingDurationMs / safeLength);
-    const typingDelayMs: number = Math.min(
-      maxTypingDelayMs,
-      Math.max(minTypingDelayMs, computedTypingDelayMs)
-    );
-    let index: number = 0;
-    this.typingIntervalId = window.setInterval(() => {
-      index += 1;
-      const nextText: string = fullText.slice(0, index);
-      this.setBotMessageText(messageId, nextText);
-      if (index >= fullText.length) {
-        this.clearTypingInterval();
-      }
-    }, typingDelayMs);
-  };
-
   private setProgressText = (messageId: number, text: string): void => {
     this.setState((prevState: ChatbotStateShape) => ({
       ...prevState,
       messages: prevState.messages.map((message: ChatMessage) => {
         if (message.id !== messageId) return message;
         return { ...message, payload: { text } };
-      }),
-    }));
-  };
-
-  private setBotMessageText = (messageId: number, text: string): void => {
-    this.setState((prevState: ChatbotStateShape) => ({
-      ...prevState,
-      messages: prevState.messages.map((message: ChatMessage) => {
-        if (message.id !== messageId) return message;
-        return { ...message, message: text };
-      }),
-    }));
-  };
-
-  private setMessageLoading = (messageId: number, isLoading: boolean): void => {
-    this.setState((prevState: ChatbotStateShape) => ({
-      ...prevState,
-      messages: prevState.messages.map((message: ChatMessage) => {
-        if (message.id !== messageId) return message;
-        return { ...message, loading: isLoading };
       }),
     }));
   };
@@ -153,19 +108,12 @@ class ActionProvider {
 
   private clearIntervals = (): void => {
     this.clearLoadingInterval();
-    this.clearTypingInterval();
   };
 
   private clearLoadingInterval = (): void => {
     if (this.loadingIntervalId === null) return;
     window.clearInterval(this.loadingIntervalId);
     this.loadingIntervalId = null;
-  };
-
-  private clearTypingInterval = (): void => {
-    if (this.typingIntervalId === null) return;
-    window.clearInterval(this.typingIntervalId);
-    this.typingIntervalId = null;
   };
 
   private createUniqueId = (): number => {

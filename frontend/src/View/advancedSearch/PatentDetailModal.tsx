@@ -69,6 +69,7 @@ const PatentDetailModal: React.FC<PatentDetailModalProps> = ({ isOpen, onClose, 
       title={null}
       open={isOpen}
       onCancel={onClose}
+      zIndex={3000}
       width={1200}
       style={{ top: 20 }}
       styles={{ 

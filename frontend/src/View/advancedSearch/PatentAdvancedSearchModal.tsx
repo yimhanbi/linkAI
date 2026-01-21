@@ -31,6 +31,7 @@ const PatentAdvancedSearchModal: React.FC<PatentAdvancedSearchModalProps> = ({ i
       title={<b style={{ fontSize: '18px' }}>상세 검색 조건 설정</b>}
       open={isOpen}
       onCancel={onClose}
+      zIndex={3000}
       width={800}
       footer={null}
       centered

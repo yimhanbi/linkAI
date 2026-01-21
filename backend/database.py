@@ -2,7 +2,16 @@ import os
 from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
 
-load_dotenv()
+def load_backend_environment_variables() -> None:
+    backend_dir: str = os.path.abspath(os.path.dirname(__file__))
+    root_dir: str = os.path.abspath(os.path.join(backend_dir, ".."))
+    root_env_path: str = os.path.join(root_dir, ".env")
+    backend_env_path: str = os.path.join(backend_dir, ".env")
+    load_dotenv(dotenv_path=root_env_path)
+    load_dotenv(dotenv_path=backend_env_path, override=True)
+    load_dotenv(override=True)
+
+load_backend_environment_variables()
 
 class MongoDB:
     def __init__(self):
