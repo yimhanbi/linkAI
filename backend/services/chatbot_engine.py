@@ -81,10 +81,22 @@ class ChatbotEngine:
     # 1. 초기화 및 유틸리티 
     # ===========================================================
     async def initialize(self):
-        if self.is_initialized: return
+        if self.is_initialized and len(self.patent_index) > 0:
+            return
+
         start_time_s: float = time.perf_counter()
         try:
-            collection = self.db[self.mongo_collection_name] 
+            collection = self.db[self.mongo_collection_name]
+
+            # Ensure MongoDB text index exists (best-effort).
+            try:
+                await collection.create_index(
+                    [("title", "text"), ("abstract", "text"), ("claims.text", "text")],
+                    name="patent_text_search_index",
+                )
+            except Exception as e:
+                self.logger.debug("chatbot_engine_create_text_index_failed err=%r", e)
+
             estimated_count: int = await collection.estimated_document_count()
             self.logger.info(
                 "chatbot_engine_mongo_target db_name=%s collection=%s estimated_docs=%d",
@@ -98,14 +110,20 @@ class ChatbotEngine:
                     self.db_name,
                     self.mongo_collection_name,
                 )
+
             try:
                 collection_names: list[str] = await self.db.list_collection_names()
-                self.logger.debug("chatbot_engine_mongo_collections db_name=%s collections=%r", self.db_name, collection_names)
+                self.logger.debug(
+                    "chatbot_engine_mongo_collections db_name=%s collections=%r",
+                    self.db_name,
+                    collection_names,
+                )
             except Exception as e:
                 self.logger.debug("chatbot_engine_mongo_list_collections_failed err=%r", e)
+
             cursor = collection.find({})
             all_patents = await cursor.to_list(length=None)
-            
+
             self.patent_flattened = []
             self.patent_index = {}
 
@@ -115,22 +133,24 @@ class ChatbotEngine:
                 if not raw_no:
                     nums = self.find_key_recursive(p, "applicationNumber")
                     raw_no = nums[0] if nums else None
-                
+
                 app_no = self.normalize_application_number(raw_no)
 
                 if app_no:
                     self.patent_index[app_no] = p
                     context_text = self.build_patent_context_ko(p)
-                    self.patent_flattened.append({
-                        "app_no": app_no,
-                        "text": context_text
-                    })
+                    self.patent_flattened.append({"app_no": app_no, "text": context_text})
 
             self.is_initialized = True
             elapsed_ms: float = (time.perf_counter() - start_time_s) * 1000.0
-            self.logger.info("chatbot_engine_initialized patents=%d elapsed_ms=%.1f", len(self.patent_flattened), elapsed_ms)
+            self.logger.info(
+                "chatbot_engine_initialized patents=%d elapsed_ms=%.1f",
+                len(self.patent_flattened),
+                elapsed_ms,
+            )
         except Exception as e:
             self.logger.exception("chatbot_engine_initialize_error err=%r", e)
+            return
 
     def normalize_application_number(self, app_no):
         return re.sub(r"[^0-9]", "", str(app_no)) if app_no else None
@@ -323,13 +343,13 @@ class ChatbotEngine:
                         weighted_keywords.append((parts[0].strip(), float(parts[1].strip())))
             elapsed_ms: float = (time.perf_counter() - start_time_s) * 1000.0
             raw_preview: str = (raw[:500] + "...") if len(raw) > 500 else raw
-            self.logger.debug(
-                "keyword_extract_done request_id=%s keywords=%r raw_preview=%r elapsed_ms=%.1f",
-                request_id,
-                weighted_keywords,
-                raw_preview,
-                elapsed_ms,
-            )
+            # self.logger.debug(
+            #     "keyword_extract_done request_id=%s keywords=%r raw_preview=%r elapsed_ms=%.1f",
+            #     request_id,
+            #     weighted_keywords,
+            #     raw_preview,
+            #     elapsed_ms,
+            # )
             return weighted_keywords
         except Exception as e:
             self.logger.exception("keyword_extract_error request_id=%s err=%r", request_id, e)
@@ -338,7 +358,7 @@ class ChatbotEngine:
     def qdrant_search_app_number(self, query: str, limit: int):
         request_id: str = uuid.uuid4().hex[:10]
         start_time_s: float = time.perf_counter()
-        self.logger.debug("qdrant_search_start request_id=%s limit=%d query=%r", request_id, limit, query)
+        # self.logger.debug("qdrant_search_start request_id=%s limit=%d query=%r", request_id, limit, query)
         emb = self.client_openai.embeddings.create(model="text-embedding-3-large", input=query)
         vector = emb.data[0].embedding
         results = self.client_qdrant.query_points(
@@ -349,34 +369,62 @@ class ChatbotEngine:
         )
         app_numbers = [self.normalize_application_number(r.payload.get("applicationNumber")) for r in results.points]
         elapsed_ms: float = (time.perf_counter() - start_time_s) * 1000.0
-        self.logger.debug("qdrant_search_done request_id=%s results=%r elapsed_ms=%.1f", request_id, app_numbers, elapsed_ms)
+        # self.logger.debug("qdrant_search_done request_id=%s results=%r elapsed_ms=%.1f", request_id, app_numbers, elapsed_ms)
         return app_numbers
 
-    def simple_match_search_app_number(self, query: str, limit: int):
+    async def simple_match_search_app_number(self, query: str, limit: int):
         request_id: str = uuid.uuid4().hex[:10]
         start_time_s: float = time.perf_counter()
-        self.logger.debug("match_search_start request_id=%s limit=%d query=%r", request_id, limit, query)
+        
+        #키워드 추출 
         weighted_keywords = self.extract_weighted_keywords_llm(query)
         if not weighted_keywords: return []
-
-        scored = []
-        for p in self.patent_flattened:
-            # Colab의 사전식 정렬 로직 적용
-            count_vector = tuple(p["text"].count(k) for k, _ in weighted_keywords)
-            if any(c > 0 for c in count_vector):
-                scored.append((count_vector, p["app_no"]))
-
-        scored.sort(key=lambda x: x[0], reverse=True)
-        app_numbers = [app_no for _, app_no in scored[:limit]]
+        
+        #검색 키워드를 공백으로 연결 
+        search_terms = " ".join([k for k, _ in weighted_keywords])
+        
+        #MongoDB $text 검색 실행
+        collection = self.db[self.mongo_collection_name]
+        cursor = collection.find(
+            {"$text": {"$search": search_terms}},
+            {"score": {"$meta": "textScore"}, "applicationNumber":1}
+        ).sort([("score", {"$meta": "textScore"})]).limit(limit)
+        
+        
+        results = await cursor.to_list(length=limit)
+        
+        # 결과 정리 및 정규화
+        app_numbers = [
+            self.normalize_application_number(r.get("applicationNumber"))
+            for r in results
+            if r.get("applicationNumber")
+        ]
+        
         elapsed_ms: float = (time.perf_counter() - start_time_s) * 1000.0
-        self.logger.debug(
-            "match_search_done request_id=%s keywords=%r matched=%d results=%r elapsed_ms=%.1f",
-            request_id,
-            weighted_keywords,
-            len(scored),
-            app_numbers,
-            elapsed_ms,
-        )
+        self.logger.info(f"🚀 [KEYWORD_MATCH_OPTIMIZED] ID:{request_id} | Time:{elapsed_ms:.1f}ms")
+        
+        
+        # weighted_keywords = sorted(
+        #     weighted_keywords,
+        #     key=lambda x: x[1],
+        #     reverse=True
+        # )
+
+        # scored = []
+        # for p in self.patent_flattened:
+        #     text = p["text"]
+            
+        #     count_vector = tuple(text.count(k) for k, _ in weighted_keywords)
+            
+            
+        #     if any(c > 0 for c in count_vector):
+        #         scored.append((count_vector, p["app_no"]))
+
+        # scored.sort(key=lambda x: x[0], reverse=True)
+        
+        
+        # app_numbers = [app_no for _, app_no in scored[:limit]]
+        # elapsed_ms: float = (time.perf_counter() - start_time_s) * 1000.0
         return app_numbers
 
     # ===========================================================
@@ -384,12 +432,27 @@ class ChatbotEngine:
     # ===========================================================
     async def hybrid_retrieve(self, query: str, target_k: int):
         request_id: str = uuid.uuid4().hex[:10]
-        start_time_s: float = time.perf_counter()
-        self.logger.info("hybrid_retrieve_start request_id=%s target_k=%d", request_id, target_k)
-        s_apps = self.simple_match_search_app_number(query, target_k)
+        start_time = time.perf_counter()
+        # self.logger.info("hybrid_retrieve_start request_id=%s target_k=%d", request_id, target_k)
+        
+        #키워드 매칭 검색 (LLM 키워드 추출 시간 포함)
+        match_start = time.perf_counter()
+        
+        #재사용하기 위해 키워드를 따로 추출하거나 simple_match 내부에서 가져온다.
+        weighted_keywords = self.extract_weighted_keywords_llm(query)
+        s_apps = await self.simple_match_search_app_number(query,target_k)
+        match_elapsed = (time.perf_counter()- match_start)*1000.0
+        
+        #2.Qdrant 벡터 검색
+        qdrant_start = time.perf_counter()
         q_apps = self.qdrant_search_app_number(query, target_k)
-        self.logger.debug("hybrid_candidates request_id=%s match=%r qdrant=%r", request_id, s_apps, q_apps)
-
+        qdrant_elapsed = (time.perf_counter()- qdrant_start) * 1000.0
+        # self.logger.debug("hybrid_candidates request_id=%s match=%r qdrant=%r", request_id, s_apps, q_apps)
+        
+        
+        
+        #3.데이터 병합 및 문서 빌드 
+        merge_start = time.perf_counter()
         used = set()
         docs = []
         for i in range(target_k):
@@ -400,131 +463,111 @@ class ChatbotEngine:
                     if app not in used and app in self.patent_index:
                         used.add(app)
                         docs.append((source, app, self.build_patent_context_ko(self.patent_index[app])))
-                if len(docs) >= target_k: break
-            if len(docs) >= target_k: break
-        elapsed_ms: float = (time.perf_counter() - start_time_s) * 1000.0
-        self.logger.info("hybrid_retrieve_done request_id=%s docs=%d elapsed_ms=%.1f", request_id, len(docs), elapsed_ms)
-        return docs
+                if len(docs) >= target_k:
+                    break
+            if len(docs) >= target_k:
+                break
+            
+        #Reranking: 모델이 가장 중요한 정보를 먼저 읽도록 재정렬
+        search_terms = [k for k, _ in weighted_keywords]
+        docs.sort(key=lambda x: sum(x[2].count(term) for term in search_terms), reverse = True)
+                     
+        merge_elapsed = (time.perf_counter() - merge_start) * 1000.0
+        total_retrieval_ms = (time.perf_counter() - start_time) * 1000.0
+        
+        self.logger.info(
+            f"[RETRIEVAL_DETAIL] ID:{request_id} | Match:{match_elapsed:.1f}ms | "
+            f"Qdrant:{qdrant_elapsed:.1f}ms | Merge:{merge_elapsed:.1f}ms | Total:{total_retrieval_ms:.1f}ms"
+        )
+        return docs, {
+            "match_ms": match_elapsed,
+            "qdrant_ms": qdrant_elapsed,
+            "merge_ms": merge_elapsed
+        }
 
-    async def answer(self, query: str, top_k: int = 50):
-        request_id: str = uuid.uuid4().hex[:10]
-        start_time_s: float = time.perf_counter()
-        self.logger.info("answer_start request_id=%s top_k=%d query=%r", request_id, top_k, query)
+    async def answer(self, query: str, top_k: int = 50, session_id: str | None = None):
+        request_id = uuid.uuid4().hex[:10]
+        full_start = time.perf_counter()
+        current_session_id: str = session_id or request_id
+        
+        # 1. DB 로드
+        init_start = time.perf_counter()
         await self.initialize()
+        init_elapsed = (time.perf_counter() - init_start) * 1000.0
+        
+        # 2. Hybrid Retrieval
+        retrieve_start = time.perf_counter()
+        docs_data, retrieve_details = await self.hybrid_retrieve(query, top_k)
+        retrieve_elapsed = (time.perf_counter() - retrieve_start) * 1000.0
+        
+        if not docs_data:
+            return "정보를 찾을 수 없습니다."
 
-        # inventor_query_match: re.Match[str] | None = re.search(
-        #     r"([가-힣]{2,10}).*(?:발명|특허)",
-        #     query,
-        # )
-        # if inventor_query_match:
-        #     inventor_name: str = inventor_query_match.group(1)
-        #     patents_by_inventor = self.find_patents_by_inventor_name(inventor_name)
-        #     #debug_log = 
-        #     self.logger.info(
-        #         "inventor_lookup request_id=%s inventor=%s matches=%d",
-        #         request_id,
-        #         inventor_name,
-        #         len(patents_by_inventor),
-        #     )
-        #     if len(patents_by_inventor) == 0:
-        #         return f"{inventor_name}님의 발명자 특허를 찾을 수 없습니다."
-        #     max_list_items: int = 100
-        #     displayed: list[dict] = patents_by_inventor[:max_list_items]
-        #     titles: str = "\n".join([f"- {item['title']} ({item['applicationNumber']})" for item in displayed])
-        #     suffix: str = "\n\n(목록은 최대 100개까지만 표시했습니다.)" if len(patents_by_inventor) > max_list_items else ""
-        #     return f"총 {len(patents_by_inventor)}개입니다.\n{titles}{suffix}"
-
-        docs_data = await self.hybrid_retrieve(query, top_k)
-        # if not docs_data:
-        #     return "정보를 찾을 수 없습니다."
-  
-  
-  
         try:
-            # log_retrieval_env: str = (os.getenv("LOG_RETRIEVAL_DEBUG") or "false").strip().lower()
-            # should_log_retrieval: bool = log_retrieval_env in ["1", "true", "yes", "y", "on"]
-            # if should_log_retrieval:
-            #     docs_preview: list[dict] = [{"source": src, "app_no": app_no} for (src, app_no, _) in docs_data[:30]]
-            #     self.logger.debug(
-            #         "retrieval_debug request_id=%s docs=%d preview=%s",
-            #         request_id,
-            #         len(docs_data),
-            #         docs_preview,
-            #     )
-            #     raw_patent_preview_chars_env: str = os.getenv("LOG_PATENT_JSON_CHARS") or "2000"
-            #     raw_patent_preview_chars: int = int(raw_patent_preview_chars_env) if raw_patent_preview_chars_env.isdigit() else 2000
-            #     sample_app_no: str = docs_data[0][1]
-            #     sample_patent: object = self.patent_index.get(sample_app_no)
-            #     self.logger.debug(
-            #         "patent_json_sample request_id=%s app_no=%s json=%s",
-            #         request_id,
-            #         sample_app_no,
-            #         self._safe_json_dumps(sample_patent, raw_patent_preview_chars),
-            #     )
-            context: str = "\n".join([f"[DOC {i+1} | {app_no} | {src}]\n{txt}" for i, (src, app_no, txt) in enumerate(docs_data)])
-            max_context_chars_env: str = os.getenv("OPENAI_MAX_CONTEXT_CHARS") or '400000'
-            max_context_chars: int = int(max_context_chars_env) if max_context_chars_env.isdigit() else 400000
-            is_context_trimmed: bool = len(context) > max_context_chars
-            if is_context_trimmed:
+            # 3. Context Formatting
+            context_start = time.perf_counter()
+            context = "\n".join([f"[DOC {i+1} | {app_no} | {src}]\n{txt}" for i, (src, app_no, txt) in enumerate(docs_data)])
+            
+            max_context_chars = int(os.getenv("OPENAI_MAX_CONTEXT_CHARS") or 400000)
+            if len(context) > max_context_chars:
                 context = context[:max_context_chars] + "\n\n[TRUNCATED]"
-                self.logger.warning("answer_context_trimmed request_id=%s max_chars=%d", request_id, max_context_chars)
-            log_context_env: str = (os.getenv("LOG_LLM_CONTEXT") or "false").strip().lower()
-            should_log_context: bool = log_context_env in ["1", "true", "yes", "y", "on"]
-            if should_log_context:
-                self.logger.debug(
-                    "llm_context_debug request_id=%s docs=%d trimmed=%s context_preview=%r",
-                    request_id,
-                    len(docs_data),
-                    is_context_trimmed,
-                    context[:4000],
-                )
-            print_llm_debug_env: str = (os.getenv("PRINT_LLM_DEBUG") or "false").strip().lower()
-            should_print_llm_debug: bool = print_llm_debug_env in ["1", "true", "yes", "y", "on"]
-            if should_print_llm_debug:
-                print("\n[LLM_DEBUG]##############################################\n")
-                print(context)
-                print("\n##############################################\n")
+            
+            context_elapsed = (time.perf_counter() - context_start) * 1000.0
 
-            llm_start_time_s: float = time.perf_counter()
+            # 4. LLM Generation
+            llm_start = time.perf_counter()
             resp = self.client_openai.chat.completions.create(
                 model=self.chat_model,
-                messages=[
-                    {"role": "user", "content": self.build_prompt(query, context)}
-                ],
+                messages=[{"role": "user", "content": self.build_prompt(query, context)}],
+            )
+            answer_text = resp.choices[0].message.content.strip()
+            llm_elapsed = (time.perf_counter() - llm_start) * 1000.0
+            
+            #DB에 대화 기록 저장 (session_id는 함수 인자로 넘어온 것 사용)
+            await self.save_message(current_session_id, query, answer_text)
+            
+            # 5. Perf Report
+            total_elapsed_ms = (time.perf_counter() - full_start) * 1000.0
+            
+            perf_report = (
+                f"\n{'='*65}\n"
+                f" [PERF_REPORT] ID: {request_id} | docs: {len(docs_data)}\n"
+                f"{'-'*65}\n"
+                f"1. Initialize DB     : {init_elapsed:>10.1f} ms\n"
+                f"2. Hybrid Retrieval  : {retrieve_elapsed:>10.1f} ms\n"
+                f"   └─ Keyword Match  : {retrieve_details['match_ms']:>10.1f} ms\n"
+                f"   └─ Qdrant Search  : {retrieve_details['qdrant_ms']:>10.1f} ms\n"
+                f"   └─ Merge & Context: {retrieve_details['merge_ms']:>10.1f} ms\n"
+                f"3. Build Final Prompt: {context_elapsed:>10.1f} ms\n"
+                f"4. LLM Generation    : {llm_elapsed:>10.1f} ms\n"
+                f"{'-'*65}\n"
+                f" TOTAL ELAPSED     : {total_elapsed_ms:>10.1f} ms ({total_elapsed_ms/1000:.2f}s)\n"
+                f"{'='*65}"
             )
             
-
-
-            answer_text: str = resp.choices[0].message.content.strip()
-            if should_print_llm_debug:
-                print("\n[LLM_DEBUG]##############################################\n")
-                print(answer_text)
-                print("\n##############################################\n")
+            self.logger.info(perf_report)
+            print(perf_report)
             
-            llm_elapsed_ms: float = (time.perf_counter() - llm_start_time_s) * 1000.0
-            total_elapsed_ms: float = (time.perf_counter() - start_time_s) * 1000.0
-            self.logger.info(
-                "answer_done request_id=%s docs=%d llm_elapsed_ms=%.1f elapsed_ms=%.1f",
-                request_id,
-                len(docs_data),
-                llm_elapsed_ms,
-                total_elapsed_ms,
-            )
-            self.logger.debug("answer_preview request_id=%s text=%r", request_id, (answer_text[:500] + "...") if len(answer_text) > 500 else answer_text)
-            return answer_text
+            return {
+                "answer": answer_text,
+                "session_id": current_session_id,
+            }
+
         except Exception as e:
-            self.logger.exception("answer_error request_id=%s err=%r", request_id, e)
-            return f"답변 생성 에러: {e}"
+            self.logger.exception(f"answer_error ID={request_id} err={e!r}")
+            return {
+                "answer": f"답변 생성 에러: {e}",
+                "session_id": current_session_id,
+            }
 
     def build_prompt(self, query: str, context: str) -> str:
-        return f"""당신은 한양대학교 ERICA 산학협력단이 보유한 특허 데이터베이스를 잘 이해하고 사용하는 전문 특허 분석가입니다.
-
+        return f"""당신은 한양대학교 ERICA 산학협력단의 전문 특허 분석가입니다. 주어진 50개의 특허 문서(DOC 1 ~ DOC 50)를 바탕으로 질문에 답하세요. 
 RULES:
-- CONTEXT만을 근거로 하고, 외부 지식이나 새로운 사실은 절대 추가하지 말 것.
-- CONTEXT를 직접 읽는 것처럼 말하지 말고, 전문가 관점에서 자연스럽게 설명하세요.
-- 주어진 PATENT의 내용을 기반으로 정확한 정보만을 제공하세요.
-- 주어진 PATENT에 정확한 정보가 없다면 알 수 없다고 답하세요.
-- 질문의 의도를 파악하여 조건에 맞는 내용만 명료하게 답하세요.
+- 반드시 제공된 [CONTEXT] 내의 정보만을 사용하세요.
+- 답변 시 근거가 되는 문서 번호를 언급하세요 (예: [DOC 5]에 따르면...).
+- 50개의 문서를 종합적으로 분석하여 누락되는 특허가 없도록 하세요.
+- 만약 질문에 해당하는 특허가 여러 개라면 목록 형태로 정리해 주세요.
+- 정보가 없다면 "제공된 데이터 내에서는 관련 내용을 찾을 수 없습니다"라고 답하세요.
 
 [CONTEXT]
 {context}
@@ -534,3 +577,41 @@ RULES:
 
 [ANSWER]
 """
+
+    # ===========================================================
+    # 5. 대화 기록 관리 (History)
+    # ===========================================================
+
+    async def save_message(self, session_id: str, user_query: str, ai_answer: str) -> None:
+        """채팅 메시지를 MongoDB의 chat_history 컬렉션에 저장함."""
+        collection = self.db["chat_history"]
+        now: float = time.time()
+        await collection.update_one(
+            {"session_id": session_id},
+            {
+                "$push": {
+                    "messages": {
+                        "$each": [
+                            {"role": "user", "content": user_query, "timestamp": now},
+                            {"role": "assistant", "content": ai_answer, "timestamp": now},
+                        ]
+                    }
+                },
+                "$set": {"updated_at": now},
+                "$setOnInsert": {"title": (user_query[:25] + "...") if len(user_query) > 25 else user_query},
+            },
+            upsert=True,
+        )
+
+    async def get_all_session(self, limit: int = 50) -> list[dict]:
+        """사이드바 목록용: 모든 채팅 세션 리스트를 가져옴."""
+        collection = self.db["chat_history"]
+        cursor = collection.find({}, {"session_id": 1, "title": 1, "updated_at": 1}).sort("updated_at", -1).limit(limit)
+        return await cursor.to_list(length=limit)
+
+    async def get_chat_history(self, session_id: str) -> list[dict]:
+        """특정 세션 클릭 시: 과거 대화 내역 전체를 반환함"""
+        collection = self.db["chat_history"]
+        doc = await collection.find_one({"session_id": session_id}, {"messages": 1})
+        messages = doc.get("messages") if doc else None
+        return messages if isinstance(messages, list) else []
