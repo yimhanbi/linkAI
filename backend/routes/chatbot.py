@@ -58,3 +58,13 @@ async def get_session_history(session_id: str, engine: ChatbotEngine = Depends(g
         return history
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"내역 로드 실패: {e}")
+
+
+# 4. 특정 세션 삭제 (사이드바 휴지통)
+@router.delete("/sessions/{session_id}")
+async def delete_session(session_id: str, engine: ChatbotEngine = Depends(get_chatbot_engine)):
+    try:
+        deleted = await engine.delete_session(session_id)
+        return {"deleted": deleted, "session_id": session_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"세션 삭제 실패: {e}")

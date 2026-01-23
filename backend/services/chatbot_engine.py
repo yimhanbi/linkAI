@@ -1,10 +1,11 @@
 import os
 import re
-# import asyncio
+import asyncio
 import logging
 import time
 import uuid
 import json
+from datetime import datetime, timedelta
 from urllib.parse import urlsplit, urlunsplit
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -29,6 +30,14 @@ class ChatbotEngine:
         self.db_name = os.getenv("DB_NAME") or "moaai_db"
         self.mongo_collection_name = os.getenv("PATENTS_COLLECTION_NAME") or "patents"
         self.qdrant_collection_name = "patent"
+
+        ttl_days_raw: str = (os.getenv("CHAT_HISTORY_TTL_DAYS") or "").strip()
+        ttl_days: int = 30
+        if ttl_days_raw.isdigit():
+            ttl_days = int(ttl_days_raw)
+        if ttl_days < 1:
+            ttl_days = 30
+        self.chat_history_ttl_days: int = ttl_days
         
        
         self.client_openai = OpenAI(api_key=self.openai_key)
@@ -67,6 +76,9 @@ class ChatbotEngine:
     # 1. 초기화 및 유틸리티 
     # ===========================================================
     async def initialize(self):
+        # Ensure indexes exist even if we skip patent initialization.
+        await self._ensure_chat_history_indexes()
+
         # 이미 초기화된 경우 바로 리턴
         if self.is_initialized and len(self.patent_index) > 0:
             self.logger.debug("chatbot_engine_initialize_skip: already initialized")
@@ -445,7 +457,27 @@ class ChatbotEngine:
         # 1. 키워드 추출 (LLM)
         # -----------------------------------------------------------
         match_start = time.perf_counter()
-        weighted_keywords = self.extract_weighted_keywords_llm(query)
+        keyword_timeout_s_raw: str = (os.getenv("OPENAI_KEYWORD_TIMEOUT_SECONDS") or "").strip()
+        keyword_timeout_s: float = 15.0
+        try:
+            if keyword_timeout_s_raw:
+                keyword_timeout_s = float(keyword_timeout_s_raw)
+        except Exception:
+            keyword_timeout_s = 15.0
+        if keyword_timeout_s <= 0:
+            keyword_timeout_s = 15.0
+        try:
+            weighted_keywords = await asyncio.wait_for(
+                asyncio.to_thread(self.extract_weighted_keywords_llm, query),
+                timeout=keyword_timeout_s,
+            )
+        except asyncio.TimeoutError:
+            self.logger.warning(
+                "[HYBRID] keyword_extract_timeout ID=%s timeout_s=%.1f",
+                request_id,
+                keyword_timeout_s,
+            )
+            weighted_keywords = []
 
         # 1단계: Mongo 기반 MATCH (limit*2 후보 → 키워드 재랭킹 → limit*2/3 사용)
         if weighted_keywords:
@@ -475,9 +507,22 @@ class ChatbotEngine:
         if remaining > 0:
             try:
                 # 중복 제거를 위해 넉넉히 가져온 뒤 필터링
-                qdrant_raw = self.qdrant_search_app_number(
-                    query,
-                    limit=target_k * 3  # 충분히 크게
+                qdrant_timeout_s_raw: str = (os.getenv("QDRANT_TIMEOUT_SECONDS") or "").strip()
+                qdrant_timeout_s: float = 10.0
+                try:
+                    if qdrant_timeout_s_raw:
+                        qdrant_timeout_s = float(qdrant_timeout_s_raw)
+                except Exception:
+                    qdrant_timeout_s = 10.0
+                if qdrant_timeout_s <= 0:
+                    qdrant_timeout_s = 10.0
+                qdrant_raw = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        self.qdrant_search_app_number,
+                        query,
+                        target_k * 3,  # limit
+                    ),
+                    timeout=qdrant_timeout_s,
                 )
 
                 used = set(mongo_apps)
@@ -496,6 +541,13 @@ class ChatbotEngine:
             except Exception as e:
                 self.logger.exception(
                     f"[HYBRID] Qdrant search failed ID={request_id} err={e!r}"
+                )
+                qdrant_apps = []
+            except asyncio.TimeoutError:
+                self.logger.warning(
+                    "[HYBRID] qdrant_search_timeout ID=%s timeout_s=%.1f",
+                    request_id,
+                    qdrant_timeout_s,
                 )
                 qdrant_apps = []
 
@@ -588,12 +640,39 @@ class ChatbotEngine:
                 context = context[:max_context_chars] + "\n\n[TRUNCATED]"
             context_elapsed: float = (time.perf_counter() - context_start) * 1000.0
             llm_start: float = time.perf_counter()
-            resp = self.client_openai.chat.completions.create(
-                model=self.chat_model,
-                messages=[{"role": "user", "content": self.build_prompt(query, context)}],
+            llm_timeout_s_raw: str = (os.getenv("OPENAI_CHAT_TIMEOUT_SECONDS") or "").strip()
+            # Default increased to allow long generations without trimming context.
+            llm_timeout_s: float = 240.0
+            try:
+                if llm_timeout_s_raw:
+                    llm_timeout_s = float(llm_timeout_s_raw)
+            except Exception:
+                llm_timeout_s = 240.0
+            if llm_timeout_s <= 0:
+                llm_timeout_s = 240.0
+            self.logger.info(
+                "openai_chat_start ID=%s session_id=%s timeout_s=%.1f model=%s",
+                request_id,
+                current_session_id,
+                llm_timeout_s,
+                self.chat_model,
+            )
+            resp = await asyncio.wait_for(
+                asyncio.to_thread(
+                    self.client_openai.chat.completions.create,
+                    model=self.chat_model,
+                    messages=[{"role": "user", "content": self.build_prompt(query, context)}],
+                ),
+                timeout=llm_timeout_s,
             )
             answer_text: str = (resp.choices[0].message.content or "").strip()
             llm_elapsed: float = (time.perf_counter() - llm_start) * 1000.0
+            self.logger.info(
+                "openai_chat_done ID=%s session_id=%s elapsed_ms=%.1f",
+                request_id,
+                current_session_id,
+                llm_elapsed,
+            )
             await self.save_message(current_session_id, query, answer_text)
             total_elapsed_ms: float = (time.perf_counter() - full_start) * 1000.0
             perf_report: str = (
@@ -614,6 +693,25 @@ class ChatbotEngine:
             self.logger.info(perf_report)
             print(perf_report)
             return {"answer": answer_text, "session_id": current_session_id}
+        except asyncio.TimeoutError:
+            llm_timeout_s_raw2: str = (os.getenv("OPENAI_CHAT_TIMEOUT_SECONDS") or "").strip()
+            llm_timeout_s2: float = 240.0
+            try:
+                if llm_timeout_s_raw2:
+                    llm_timeout_s2 = float(llm_timeout_s_raw2)
+            except Exception:
+                llm_timeout_s2 = 240.0
+            if llm_timeout_s2 <= 0:
+                llm_timeout_s2 = 240.0
+            self.logger.warning(
+                "openai_chat_timeout ID=%s session_id=%s timeout_s=%.1f",
+                request_id,
+                current_session_id,
+                llm_timeout_s2,
+            )
+            answer_text: str = f"답변 생성 에러: OpenAI timeout after {llm_timeout_s2:.0f}s"
+            await self.save_message(current_session_id, query, answer_text)
+            return {"answer": answer_text, "session_id": current_session_id}
         except Exception as e:
             self.logger.exception(f"answer_error ID={request_id} err={e!r}")
             answer_text: str = f"답변 생성 에러: {e}"
@@ -622,7 +720,7 @@ class ChatbotEngine:
 
     async def save_message(self, session_id: str, user_query: str, ai_answer: str) -> None:
         collection = self.db["chat_history"]
-        now: float = time.time()
+        now_dt: datetime = datetime.utcnow()
         title: str = (user_query[:25] + "...") if len(user_query) > 25 else user_query
         await collection.update_one(
             {"session_id": session_id},
@@ -631,12 +729,14 @@ class ChatbotEngine:
                 # Subsequent calls for the same session_id will be no-ops.
                 "$setOnInsert": {
                     "session_id": session_id,
-                    "created_at": now,
-                    "updated_at": now,
+                    "created_at": now_dt,
+                    "updated_at": now_dt,
+                    # TTL: MongoDB TTL index uses Date type.
+                    "expires_at": now_dt + timedelta(days=self.chat_history_ttl_days),
                     "title": title,
                     "messages": [
-                        {"role": "user", "content": user_query, "timestamp": now},
-                        {"role": "assistant", "content": ai_answer, "timestamp": now},
+                        {"role": "user", "content": user_query, "timestamp": time.time()},
+                        {"role": "assistant", "content": ai_answer, "timestamp": time.time()},
                     ],
                 },
             },
@@ -657,6 +757,32 @@ class ChatbotEngine:
         doc = await collection.find_one({"session_id": session_id}, {"_id": 0, "messages": 1})
         messages = doc.get("messages") if doc else None
         return messages if isinstance(messages, list) else []
+
+    async def delete_session(self, session_id: str) -> bool:
+        collection = self.db["chat_history"]
+        result = await collection.delete_one({"session_id": session_id})
+        return bool(getattr(result, "deleted_count", 0))
+
+    async def _ensure_chat_history_indexes(self) -> None:
+        """
+        Best-effort index creation for chat_history.
+        - Unique-ish lookup by session_id
+        - TTL cleanup by expires_at (Date) so old sessions auto-delete
+        """
+        try:
+            collection = self.db["chat_history"]
+            await collection.create_index(
+                [("session_id", 1)],
+                name="chat_history_session_id_idx",
+            )
+            # TTL index: when expires_at < now, document is eligible for deletion.
+            await collection.create_index(
+                [("expires_at", 1)],
+                expireAfterSeconds=0,
+                name="chat_history_expires_at_ttl",
+            )
+        except Exception as e:
+            self.logger.debug("chatbot_engine_chat_history_index_create_failed err=%r", e)
 
     def build_prompt(self, query: str, context: str) -> str:
         return f"""당신은 한양대학교 ERICA 산학협력단이 보유한 특허 데이터베이스(KIPRIS Detail.json)를 잘 이해하고 사용하는 전문 특허 분석가입니다.

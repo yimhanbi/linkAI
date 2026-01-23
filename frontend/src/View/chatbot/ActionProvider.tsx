@@ -1,5 +1,3 @@
-import { useChatbotStore } from '@/ViewModel/useChatbotVM';
-
 interface ChatMessage {
   id: number;
   type: string;
@@ -13,6 +11,8 @@ interface ChatbotStateShape {
   messages: ChatMessage[];
 }
 
+type GetBotResponse = (inputMessage: string) => Promise<string>;
+
 type SetChatbotState = (updater: (prevState: ChatbotStateShape) => ChatbotStateShape) => void;
 type CreateChatBotMessage = (message: string, options?: Record<string, unknown>) => ChatMessage;
 
@@ -20,11 +20,18 @@ class ActionProvider {
   private readonly createChatBotMessage: CreateChatBotMessage;
   private readonly setState: SetChatbotState;
   private loadingIntervalId: number | null;
+  private readonly chatbotState: { getBotResponse?: GetBotResponse } | null;
 
-  constructor(createChatBotMessage: CreateChatBotMessage, setStateFunc: SetChatbotState) {
+  constructor(
+    createChatBotMessage: CreateChatBotMessage,
+    setStateFunc: SetChatbotState,
+    _createClientMessage?: unknown,
+    chatbotState?: { getBotResponse?: GetBotResponse }
+  ) {
     this.createChatBotMessage = createChatBotMessage;
     this.setState = setStateFunc;
     this.loadingIntervalId = null;
+    this.chatbotState = chatbotState ?? null;
   }
 
   greet = (): void => {
@@ -38,8 +45,10 @@ class ActionProvider {
     this.addProgressMessage(progressMessageId, "AI 검색을 준비중입니다...");
     this.startProgressTicker(progressMessageId);
     try {
-      const getBotResponse: ((inputMessage: string) => Promise<string>) =
-        useChatbotStore.getState().getBotResponse;
+      const getBotResponse: GetBotResponse | undefined = this.chatbotState?.getBotResponse;
+      if (!getBotResponse) {
+        throw new Error("getBotResponse is not provided in chatbot state");
+      }
       const response: string = await getBotResponse(message);
       this.clearIntervals();
       this.removeMessage(progressMessageId);
@@ -48,7 +57,17 @@ class ActionProvider {
     } catch (error) {
       this.clearIntervals();
       this.removeMessage(progressMessageId);
-      const errorMessage: ChatMessage = this.createChatBotMessage('에러가 발생했습니다.');
+      // eslint-disable-next-line no-console
+      console.error("Chatbot error:", error);
+      const errorText: string =
+        error instanceof Error
+          ? error.message
+          : typeof error === "string"
+            ? error
+            : JSON.stringify(error);
+      const errorMessage: ChatMessage = this.createChatBotMessage(
+        `에러가 발생했습니다.\n${errorText}`
+      );
       this.updateChatbotState(errorMessage);
     }
   };

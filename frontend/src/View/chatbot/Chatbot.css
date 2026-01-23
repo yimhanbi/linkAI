@@ -33,6 +33,115 @@
   overflow: hidden;
   border: 1px solid var(--border);
   background: var(--bg);
+  position: relative;
+}
+
+/* ==============================
+   Chat welcome (new session UI)
+   ============================== */
+.chatbot-welcome {
+  position: absolute;
+  /* Leave space for the bottom input pill (react-chatbot-kit) */
+  inset: 0 0 110px 0;
+  z-index: 2;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.chatbot-welcome-inner {
+  width: min(920px, 100%);
+  text-align: center;
+}
+
+.chatbot-welcome-title {
+  font-size: 34px;
+  line-height: 1.1;
+  font-weight: 800;
+  color: var(--text);
+  margin: 0;
+}
+
+.chatbot-welcome-subtitle {
+  margin: 12px 0 0;
+  font-size: 15px;
+  color: var(--text-sub);
+}
+
+.chatbot-welcome-grid {
+  margin-top: 34px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.chatbot-welcome-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px 16px;
+  text-align: center;
+  cursor: pointer;
+  box-shadow:
+    0 8px 18px rgba(0, 0, 0, 0.05),
+    0 1px 6px rgba(0, 0, 0, 0.04);
+  transition:
+    transform 0.08s ease,
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.chatbot-welcome-card:hover {
+  background: var(--bg-sub);
+  border-color: color-mix(in srgb, var(--border) 70%, var(--primary) 30%);
+  box-shadow:
+    0 10px 22px rgba(0, 0, 0, 0.06),
+    0 2px 10px rgba(0, 0, 0, 0.06);
+}
+
+.chatbot-welcome-card:active {
+  transform: translateY(1px);
+}
+
+.chatbot-welcome-card:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.chatbot-welcome-card-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.chatbot-welcome-card-desc {
+  margin-top: 10px;
+  font-size: 14px;
+  color: var(--text-sub);
+}
+
+[data-theme="dark"] .chatbot-welcome-card {
+  box-shadow:
+    0 12px 26px rgba(0, 0, 0, 0.36),
+    0 2px 10px rgba(0, 0, 0, 0.22);
+}
+
+[data-theme="dark"] .chatbot-welcome-card:hover {
+  box-shadow:
+    0 16px 34px rgba(0, 0, 0, 0.45),
+    0 6px 16px rgba(0, 0, 0, 0.28);
+}
+
+@media (max-width: 820px) {
+  .chatbot-welcome-title {
+    font-size: 30px;
+  }
+  .chatbot-welcome-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* react-chatbot-kit 기본 사이즈(작게 고정)를 풀사이즈로 덮어쓰기 */
@@ -52,6 +161,8 @@
   flex: 1 1 auto;
   height: auto !important;
   overflow-y: auto;
+  /* Leave space for the new pill input */
+  padding-bottom: 120px;
 }
 
 .chatbot-window .react-chatbot-kit-chat-input-container {
@@ -68,21 +179,88 @@
 }
 
 .chatbot-window .react-chatbot-kit-chat-input {
-  background-color: var(--bg);
+  background-color: transparent;
   color: var(--text);
-  border-top: 1px solid var(--border);
+  border: none;
+  outline: none;
+  font-size: 16px;
+  line-height: 1.4;
+  padding: 10px 12px;
 }
 
 .chatbot-window .react-chatbot-kit-chat-input::placeholder {
-  color: var(--text-sub);
+  /* lighter placeholder than normal secondary text */
+  color: rgba(107, 114, 128, 0.65);
+}
+
+[data-theme="dark"] .chatbot-window .react-chatbot-kit-chat-input::placeholder {
+  color: rgba(161, 161, 170, 0.7);
+}
+
+/* ---- ChatGPT/Gemini-like input (pill) ---- */
+.chatbot-window .react-chatbot-kit-chat-input-container {
+  background: transparent;
+  padding: 18px 18px 24px;
+}
+
+/* Some versions wrap input+button in a <form> with this class */
+.chatbot-window .react-chatbot-kit-chat-input-form {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(920px, 100%);
+  margin: 0 auto;
+  padding: 10px 12px;
+  border-radius: 9999px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.06),
+    0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+/* Fallback: if there is no input-form wrapper, style container itself as pill */
+.chatbot-window .react-chatbot-kit-chat-input-container:not(:has(.react-chatbot-kit-chat-input-form)) {
+  display: flex;
+  justify-content: center;
+}
+
+.chatbot-window
+  .react-chatbot-kit-chat-input-container:not(:has(.react-chatbot-kit-chat-input-form))
+  .react-chatbot-kit-chat-input {
+  width: min(920px, 100%);
+}
+
+.chatbot-window .react-chatbot-kit-chat-input {
+  flex: 1;
+  min-width: 0;
 }
 
 .chatbot-window .react-chatbot-kit-chat-btn-send {
+  width: 44px;
+  height: 44px;
+  border-radius: 9999px;
   background-color: var(--primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease, transform 0.05s ease;
 }
 
 .chatbot-window .react-chatbot-kit-chat-btn-send:hover {
   background-color: var(--primary-hover);
+}
+
+.chatbot-window .react-chatbot-kit-chat-btn-send:active {
+  transform: translateY(1px);
+}
+
+.chatbot-window .react-chatbot-kit-chat-btn-send svg {
+  width: 18px;
+  height: 18px;
 }
 
 .chatbot-window .react-chatbot-kit-chat-bot-message {
@@ -255,8 +433,8 @@
 /* 사이드바 전체 컨테이너 */
 .chatbot-sidebar {
   width: 300px;
-  background-color: #fcfcfc; /* 아주 연한 회색 */
-  border-right: 1px solid #e5e7eb;
+  background-color: var(--sidebar-bg);
+  border-right: 1px solid var(--sidebar-border);
   display: flex;
   flex-direction: column;
   padding: 12px;
@@ -274,19 +452,19 @@
 .sidebar-title {
   font-size: 1.25rem;
   font-weight: 700;
-  color: #1f2937;
+  color: var(--sidebar-text);
 }
 
 .new-chat-btn {
   background: none;
   border: none;
-  color: #9ca3af;
+  color: var(--sidebar-text-sub);
   cursor: pointer;
   transition: color 0.2s;
 }
 
 .new-chat-btn:hover {
-  color: #111827;
+  color: var(--sidebar-text);
 }
 
 /* 세션 리스트 */
@@ -312,9 +490,30 @@
   width: 100%;
 }
 
+.session-delete-btn {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--sidebar-text-sub);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease;
+  padding: 4px;
+  border-radius: 8px;
+}
+
+.session-item:hover .session-delete-btn {
+  opacity: 1;
+}
+
+.session-delete-btn:hover {
+  color: var(--sidebar-text);
+  background-color: var(--sidebar-link-hover-bg);
+}
+
 .session-item .session-text {
   font-size: 0.95rem;
-  color: #4b5563;
+  color: var(--sidebar-text-sub);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -322,25 +521,31 @@
 }
 
 .session-icon {
-  color: #6b7280;
+  color: var(--sidebar-text-sub);
   flex-shrink: 0;
 }
 
 /* 호버 효과 */
 .session-item:hover {
-  background-color: #f3f4f6;
+  background-color: var(--sidebar-link-hover-bg);
 }
 
 /* 활성화된 세션 (클릭된 상태) */
 .session-item.active {
-  background-color: #e5e7eb; /* 살짝 더 진한 회색 */
+  background-color: var(--bg-sub);
 }
 
 .session-item.active .session-text {
   font-weight: 600;
-  color: #111827;
+  color: var(--sidebar-text);
 }
 
 .session-item.active .session-icon {
-  color: #111827;
+  color: var(--sidebar-text);
+}
+
+/* Keyboard accessibility */
+.session-item:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
