@@ -30,11 +30,15 @@ export const useChatViewModel = () => {
     const currentSessionIdRef = useRef<string | null>(null);
     const [draftSessionKey, setDraftSessionKey] = useState<string>(createDraftSessionKey());
     const [isLoading, setIsLoading] = useState<boolean>(false);
+    const loadSessionsRequestIdRef = useRef<number>(0);
 
     // --- 초기 데이터 로드 ---
     const loadSessions = useCallback(async () => {
+        const requestId: number = loadSessionsRequestIdRef.current + 1;
+        loadSessionsRequestIdRef.current = requestId;
         const data = await chatService.getSessions();
-        setSessions(data);
+        if (loadSessionsRequestIdRef.current !== requestId) return;
+        setSessions(data as ChatSession[]);
     }, []);
 
     useEffect(() => {
@@ -88,11 +92,29 @@ export const useChatViewModel = () => {
       const aiMsg: Message = { role: 'assistant', content: result.answer };
       setMessages((prev) => [...prev, aiMsg]);
 
-      // 만약 새 채팅이었다면 받은 session_id 저장 및 목록 새로고침
+      const effectiveSessionId: string = sessionIdToSend ?? result.session_id;
+      const title: string = userInput.length > 25 ? `${userInput.slice(0, 25)}...` : userInput;
+
+      // Keep sidebar title in sync with what user actually asked
+      setSessions((prev) => {
+        const existing = prev.find((s) => s.session_id === effectiveSessionId);
+        const updated: ChatSession = {
+          session_id: effectiveSessionId,
+          title,
+          updated_at: Date.now(),
+        };
+        if (!existing) return [updated, ...prev];
+        return [
+          updated,
+          ...prev.filter((s) => s.session_id !== effectiveSessionId),
+        ];
+      });
+
+      // If it was a new chat, persist the real session id and refresh from server
       if (!sessionIdToSend) {
         setCurrentSessionId(result.session_id);
         currentSessionIdRef.current = result.session_id;
-        await loadSessions(); 
+        await loadSessions();
       }
       return result.answer;
     } catch (error) {

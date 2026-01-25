@@ -9,7 +9,7 @@ import ChatSidebar from './ChatSidebar';
 import ChatWelcome from './ChatWelcome';
 import { useChatbotStore } from '@/ViewModel/useChatbotVM';
 import { type Message, useChatViewModel } from '@/ViewModel/chatbot/ChatViewModel';
-import { useEffect } from 'react';
+import { useEffect, useLayoutEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 
 const ChatbotContainer = () => {
@@ -19,6 +19,18 @@ const ChatbotContainer = () => {
 
   //viewModel 사용
   const { messages, sessions, currentSessionId, currentSessionKey, selectSession, createNewChat, deleteSession, sendMessage } = useChatViewModel();
+
+  // Fallback wiring for ActionProvider across react-chatbot-kit versions.
+  // Use layout effect so it's available before the user submits the first message.
+  useLayoutEffect(() => {
+    (window as unknown as { __LINKAI_GET_BOT_RESPONSE?: unknown }).__LINKAI_GET_BOT_RESPONSE = sendMessage;
+    return () => {
+      (window as unknown as { __LINKAI_GET_BOT_RESPONSE?: unknown }).__LINKAI_GET_BOT_RESPONSE = undefined;
+    };
+  }, [sendMessage]);
+
+  // Extra safety: keep it assigned during render as well.
+  (window as unknown as { __LINKAI_GET_BOT_RESPONSE?: unknown }).__LINKAI_GET_BOT_RESPONSE = sendMessage;
 
   useEffect(() => {
     if (location.pathname === '/chatbot') {
@@ -54,7 +66,8 @@ const ChatbotContainer = () => {
     inputEl.dispatchEvent(new Event("input", { bubbles: true }));
   };
 
-  const shouldShowWelcome: boolean = messages.length === 0;
+  // Show welcome only for "new chat" (no active session)
+  const shouldShowWelcome: boolean = messages.length === 0 && !currentSessionId;
 
   if (!isOpen) {
     return null;

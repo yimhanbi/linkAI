@@ -20,18 +20,18 @@ class ActionProvider {
   private readonly createChatBotMessage: CreateChatBotMessage;
   private readonly setState: SetChatbotState;
   private loadingIntervalId: number | null;
-  private readonly chatbotState: { getBotResponse?: GetBotResponse } | null;
+  private readonly chatbotStateLike: unknown;
 
   constructor(
     createChatBotMessage: CreateChatBotMessage,
     setStateFunc: SetChatbotState,
     _createClientMessage?: unknown,
-    chatbotState?: { getBotResponse?: GetBotResponse }
+    chatbotState?: unknown
   ) {
     this.createChatBotMessage = createChatBotMessage;
     this.setState = setStateFunc;
     this.loadingIntervalId = null;
-    this.chatbotState = chatbotState ?? null;
+    this.chatbotStateLike = chatbotState ?? null;
   }
 
   greet = (): void => {
@@ -45,9 +45,10 @@ class ActionProvider {
     this.addProgressMessage(progressMessageId, "AI 검색을 준비중입니다...");
     this.startProgressTicker(progressMessageId);
     try {
-      const getBotResponse: GetBotResponse | undefined = this.chatbotState?.getBotResponse;
+      const getBotResponse: GetBotResponse | undefined = this.resolveGetBotResponse(this.chatbotStateLike);
       if (!getBotResponse) {
-        throw new Error("getBotResponse is not provided in chatbot state");
+        const meta: string = this.describeChatbotStateLike(this.chatbotStateLike);
+        throw new Error(`getBotResponse is not provided in chatbot state (${meta})`);
       }
       const response: string = await getBotResponse(message);
       this.clearIntervals();
@@ -77,6 +78,50 @@ class ActionProvider {
       ...prevState,
       messages: [...prevState.messages, message],
     }));
+  };
+
+  private resolveGetBotResponse = (value: unknown): GetBotResponse | undefined => {
+    // Global fallback (set by ChatbotContainer) must work even when the 4th arg is undefined/null.
+    const globalValue: unknown = (window as unknown as { __LINKAI_GET_BOT_RESPONSE?: unknown })
+      .__LINKAI_GET_BOT_RESPONSE;
+    if (typeof globalValue === "function") return globalValue as GetBotResponse;
+
+    if (!value || typeof value !== "object") return undefined;
+    const asRecord = value as Record<string, unknown>;
+    const direct = asRecord.getBotResponse;
+    if (typeof direct === "function") return direct as GetBotResponse;
+
+    const current = asRecord.current;
+    if (current && typeof current === "object") {
+      const currentRecord = current as Record<string, unknown>;
+      const fromCurrent = currentRecord.getBotResponse;
+      if (typeof fromCurrent === "function") return fromCurrent as GetBotResponse;
+      const nestedState = currentRecord.state;
+      if (nestedState && typeof nestedState === "object") {
+        const nestedRecord = nestedState as Record<string, unknown>;
+        const fromNested = nestedRecord.getBotResponse;
+        if (typeof fromNested === "function") return fromNested as GetBotResponse;
+      }
+    }
+
+    const nestedState = asRecord.state;
+    if (nestedState && typeof nestedState === "object") {
+      const nestedRecord = nestedState as Record<string, unknown>;
+      const fromNested = nestedRecord.getBotResponse;
+      if (typeof fromNested === "function") return fromNested as GetBotResponse;
+    }
+
+    return undefined;
+  };
+
+  private describeChatbotStateLike = (value: unknown): string => {
+    if (value === null) return "value=null";
+    if (value === undefined) return "value=undefined";
+    if (typeof value !== "object") return `type=${typeof value}`;
+    const keys = Object.keys(value as Record<string, unknown>).slice(0, 10).join(",");
+    const hasCurrent = "current" in (value as Record<string, unknown>);
+    const hasState = "state" in (value as Record<string, unknown>);
+    return `keys=[${keys}] hasCurrent=${hasCurrent} hasState=${hasState}`;
   };
 
   private addProgressMessage = (messageId: number, text: string): void => {

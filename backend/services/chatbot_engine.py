@@ -72,6 +72,7 @@ class ChatbotEngine:
         except Exception:
             return "<UNPARSEABLE_URI>"
 
+
     # ===========================================================
     # 1. 초기화 및 유틸리티 
     # ===========================================================
@@ -369,6 +370,7 @@ class ChatbotEngine:
         self,
         weighted_keywords: list[tuple[str, float]],
         limit: int,
+        request_id: str | None = None,
     ) -> list[str]:
         """
         1. MongoDB $text로 limit*2 개수만큼 후보를 가져온 뒤
@@ -388,6 +390,7 @@ class ChatbotEngine:
 
         # 2) Mongo에서 limit의 2배만큼 후보 가져오기 (textScore 순)
         mongo_limit = limit * 2
+        mongo_find_start: float = time.perf_counter()
         cursor = collection.find(
             {"$text": {"$search": search_terms}},
             {
@@ -397,6 +400,14 @@ class ChatbotEngine:
         ).sort([("score", {"$meta": "textScore"})]).limit(mongo_limit)
 
         results = await cursor.to_list(length=mongo_limit)
+        mongo_find_ms: float = (time.perf_counter() - mongo_find_start) * 1000.0
+        self._log_match_detail(
+            "[MATCH_DETAIL] ID=%s step=mongo_text_search elapsed_ms=%.1f candidates=%d search_terms=%r",
+            request_id or "-",
+            mongo_find_ms,
+            len(results) if isinstance(results, list) else 0,
+            search_terms,
+        )
         if not results:
             return []
 
@@ -414,9 +425,18 @@ class ChatbotEngine:
             return []
 
         # 3) patent_flattened에서 app_no -> text 매핑
+        text_map_start: float = time.perf_counter()
         text_map = {p["app_no"]: p["text"] for p in self.patent_flattened}
+        text_map_ms: float = (time.perf_counter() - text_map_start) * 1000.0
+        self._log_match_detail(
+            "[MATCH_DETAIL] ID=%s step=prepare_text_map elapsed_ms=%.1f size=%d",
+            request_id or "-",
+            text_map_ms,
+            len(text_map),
+        )
 
         # 4) 키워드 가중치 기반 스코어 계산
+        rescore_start: float = time.perf_counter()
         scored: list[tuple[float, str]] = []
         for app_no in candidates:
             text = text_map.get(app_no)
@@ -432,6 +452,15 @@ class ChatbotEngine:
                     score += count * weight
 
             scored.append((score, app_no))
+
+        rescore_ms: float = (time.perf_counter() - rescore_start) * 1000.0
+        self._log_match_detail(
+            "[MATCH_DETAIL] ID=%s step=keyword_rescore elapsed_ms=%.1f docs=%d keywords=%d",
+            request_id or "-",
+            rescore_ms,
+            len(candidates),
+            len(weighted_keywords),
+        )
 
         # 키워드 기반 스코어를 전혀 못 만든 경우 → Mongo 순서대로 사용
         max_mongo = int(limit * (2 / 3)) or 1  # 최소 1개는 가져오도록
@@ -466,6 +495,7 @@ class ChatbotEngine:
             keyword_timeout_s = 15.0
         if keyword_timeout_s <= 0:
             keyword_timeout_s = 15.0
+        kw_llm_start: float = time.perf_counter()
         try:
             weighted_keywords = await asyncio.wait_for(
                 asyncio.to_thread(self.extract_weighted_keywords_llm, query),
@@ -478,6 +508,13 @@ class ChatbotEngine:
                 keyword_timeout_s,
             )
             weighted_keywords = []
+        kw_llm_ms: float = (time.perf_counter() - kw_llm_start) * 1000.0
+        self._log_match_detail(
+            "[MATCH_DETAIL] ID=%s step=keyword_llm elapsed_ms=%.1f keywords=%d",
+            request_id,
+            kw_llm_ms,
+            len(weighted_keywords),
+        )
 
         # 1단계: Mongo 기반 MATCH (limit*2 후보 → 키워드 재랭킹 → limit*2/3 사용)
         if weighted_keywords:
@@ -485,6 +522,7 @@ class ChatbotEngine:
                 mongo_apps = await self.simple_match_search_app_number(
                     weighted_keywords,
                     target_k,
+                    request_id=request_id,
                 )
             except Exception as e:
                 self.logger.exception(
@@ -725,19 +763,20 @@ class ChatbotEngine:
         await collection.update_one(
             {"session_id": session_id},
             {
-                # Store only the first query/answer per session to prevent unbounded growth.
-                # Subsequent calls for the same session_id will be no-ops.
+    
                 "$setOnInsert": {
                     "session_id": session_id,
                     "created_at": now_dt,
-                    "updated_at": now_dt,
-                    # TTL: MongoDB TTL index uses Date type.
-                    "expires_at": now_dt + timedelta(days=self.chat_history_ttl_days),
-                    "title": title,
                     "messages": [
                         {"role": "user", "content": user_query, "timestamp": time.time()},
                         {"role": "assistant", "content": ai_answer, "timestamp": time.time()},
                     ],
+                },
+                "$set": {
+                    "updated_at": now_dt,
+                    "title": title,
+                    # Refresh TTL based on latest activity (expire N days after last use)
+                    "expires_at": now_dt + timedelta(days=self.chat_history_ttl_days),
                 },
             },
             upsert=True,
