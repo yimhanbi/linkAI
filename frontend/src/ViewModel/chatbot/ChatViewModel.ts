@@ -1,5 +1,14 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { chatService } from '@/Service/chatbot/chatService';
+import {
+  saveSessionsToStorage,
+  loadSessionsFromStorage,
+  saveHistoryToStorage,
+  loadHistoryFromStorage,
+  deleteHistoryFromStorage,
+  type CachedSession,
+  type CachedMessage,
+} from '@/Service/chatbot/chatStorage';
 
 
 //메시지 객체 타입 정의
@@ -36,9 +45,21 @@ export const useChatViewModel = () => {
     const loadSessions = useCallback(async () => {
         const requestId: number = loadSessionsRequestIdRef.current + 1;
         loadSessionsRequestIdRef.current = requestId;
+        
+        // 먼저 localStorage에서 캐시 확인
+        const cachedSessions = loadSessionsFromStorage();
+        if (cachedSessions && cachedSessions.length > 0) {
+            setSessions(cachedSessions as ChatSession[]);
+        }
+        
+        // 서버에서 최신 데이터 가져오기 (백그라운드)
         const data = await chatService.getSessions();
         if (loadSessionsRequestIdRef.current !== requestId) return;
-        setSessions(data as ChatSession[]);
+        
+        // 서버 데이터를 상태에 반영하고 localStorage에 저장
+        const serverSessions = data as ChatSession[];
+        setSessions(serverSessions);
+        saveSessionsToStorage(serverSessions as CachedSession[]);
     }, []);
 
     useEffect(() => {
@@ -57,6 +78,7 @@ export const useChatViewModel = () => {
         currentSessionIdRef.current = null;
         setDraftSessionKey(createDraftSessionKey());
         setMessages([]);
+        // 새 채팅이므로 localStorage에 저장할 필요 없음 (아직 세션이 생성되지 않음)
     };
 
     //2.과거 세션 선택 시 내역 불러오기
@@ -64,11 +86,26 @@ export const useChatViewModel = () => {
     setIsLoading(true);
     setCurrentSessionId(sessionId);
     currentSessionIdRef.current = sessionId;
+    
+    // 먼저 localStorage에서 캐시 확인
+    const cachedHistory = loadHistoryFromStorage(sessionId);
+    if (cachedHistory && cachedHistory.length > 0) {
+      setMessages(cachedHistory as Message[]);
+      setIsLoading(false);
+    }
+    
+    // 서버에서 최신 데이터 가져오기 (백그라운드)
     try {
       const history = await chatService.getChatHistory(sessionId);
       setMessages(history);
+      // 서버에서 가져온 데이터를 localStorage에 저장
+      saveHistoryToStorage(sessionId, history as CachedMessage[]);
     } catch (error) {
       console.error("내역 로드 실패:", error);
+      // 에러 발생 시 캐시된 데이터가 있으면 그대로 유지
+      if (!cachedHistory || cachedHistory.length === 0) {
+        setMessages([]);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -78,10 +115,18 @@ export const useChatViewModel = () => {
   const sendMessage = async (userInput: string): Promise<string> => {
     if (!userInput.trim()) return "";
 
-    // 사용자 메시지 화면에 즉시 추가
-    const userMsg: Message = { role: 'user', content: userInput };
-    setMessages((prev) => [...prev, userMsg]);
-    setIsLoading(true);
+      // 사용자 메시지 화면에 즉시 추가
+      const userMsg: Message = { role: 'user', content: userInput };
+      setMessages((prev) => {
+        const updated = [...prev, userMsg];
+        // localStorage에 즉시 저장 (세션이 있는 경우)
+        const sessionIdToCheck = currentSessionIdRef.current;
+        if (sessionIdToCheck) {
+          saveHistoryToStorage(sessionIdToCheck, updated as CachedMessage[]);
+        }
+        return updated;
+      });
+      setIsLoading(true);
 
     try {
       const sessionIdToSend: string | null = currentSessionIdRef.current;
@@ -90,7 +135,13 @@ export const useChatViewModel = () => {
       
       // AI 답변 추가
       const aiMsg: Message = { role: 'assistant', content: result.answer };
-      setMessages((prev) => [...prev, aiMsg]);
+      setMessages((prev) => {
+        const updated = [...prev, aiMsg];
+        // localStorage에 즉시 저장
+        const effectiveSessionId: string = sessionIdToSend ?? result.session_id;
+        saveHistoryToStorage(effectiveSessionId, updated as CachedMessage[]);
+        return updated;
+      });
 
       const effectiveSessionId: string = sessionIdToSend ?? result.session_id;
       const title: string = userInput.length > 25 ? `${userInput.slice(0, 25)}...` : userInput;
@@ -128,7 +179,15 @@ export const useChatViewModel = () => {
         role: 'assistant', 
         content: errorText,
       };
-      setMessages((prev) => [...prev, errorMsg]);
+      setMessages((prev) => {
+        const updated = [...prev, errorMsg];
+        // localStorage에 에러 메시지도 저장
+        const sessionIdToCheck = currentSessionIdRef.current;
+        if (sessionIdToCheck) {
+          saveHistoryToStorage(sessionIdToCheck, updated as CachedMessage[]);
+        }
+        return updated;
+      });
       return errorMsg.content;
     } finally {
       setIsLoading(false);
@@ -138,7 +197,14 @@ export const useChatViewModel = () => {
   const deleteSession = async (sessionId: string): Promise<void> => {
     const didDelete = await chatService.deleteSession(sessionId);
     if (!didDelete) return;
-    setSessions((prev) => prev.filter((s) => s.session_id !== sessionId));
+    setSessions((prev) => {
+      const updated = prev.filter((s) => s.session_id !== sessionId);
+      // localStorage에서도 삭제
+      saveSessionsToStorage(updated as CachedSession[]);
+      return updated;
+    });
+    // localStorage에서 해당 세션의 히스토리도 삭제
+    deleteHistoryFromStorage(sessionId);
     if (currentSessionIdRef.current === sessionId) {
       createNewChat();
     }
