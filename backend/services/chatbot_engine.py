@@ -10,6 +10,7 @@ from urllib.parse import urlsplit, urlunsplit
 from dotenv import load_dotenv
 from openai import OpenAI
 from qdrant_client import QdrantClient
+from qdrant_client.models import Distance, VectorParams
 from motor.motor_asyncio import AsyncIOMotorClient
 
 class ChatbotEngine:
@@ -18,18 +19,32 @@ class ChatbotEngine:
         root_dir: str = os.path.abspath(os.path.join(backend_dir, ".."))
         root_env_path: str = os.path.join(root_dir, ".env")
         backend_env_path: str = os.path.join(backend_dir, ".env")
-        load_dotenv(dotenv_path=root_env_path)
-        load_dotenv(dotenv_path=backend_env_path, override=True)
-        load_dotenv(override=True)
+        load_dotenv(dotenv_path=root_env_path, override=False)
+        load_dotenv(dotenv_path=backend_env_path, override=False)
         self.openai_key = os.getenv("OPENAI_API_KEY")
-        self.qdrant_url = os.getenv("QDRANT_URL")
-        self.qdrant_api_key = os.getenv("QDRANT_API_KEY")
-        self.mongo_uri = os.getenv("MONGODB_URI") or os.getenv("MONGO_URI")
+        self.qdrant_url = self._require_qdrant_url(os.getenv("QDRANT_URL"))
+        self.qdrant_api_key = self._require_qdrant_api_key(
+            qdrant_url=self.qdrant_url,
+            api_key=os.getenv("QDRANT_API_KEY"),
+        )
+        self.mongo_uri = self._resolve_local_mongo_uri(
+            raw_uri=os.getenv("MONGODB_URI") or os.getenv("MONGO_URI"),
+            docker_hostname="mongo",
+            default_uri="mongodb://127.0.0.1:27017",
+        )
         self.chat_model = os.getenv("OPENAI_CHAT_MODEL") or "gpt-5"
         
         self.db_name = os.getenv("DB_NAME") or "moaai_db"
         self.mongo_collection_name = os.getenv("PATENTS_COLLECTION_NAME") or "patents"
         self.qdrant_collection_name = "patent"
+        self.qdrant_vector_size: int = int(os.getenv("QDRANT_VECTOR_SIZE") or 3072)
+        # Use faster/cheaper models for retrieval helpers by default.
+        # These can be overridden via environment variables.
+        self.keyword_model = os.getenv("OPENAI_KEYWORD_MODEL") or "gpt-4o-mini"
+        default_embedding_model: str = (
+            "text-embedding-3-small" if self.qdrant_vector_size == 1536 else "text-embedding-3-large"
+        )
+        self.embedding_model = os.getenv("OPENAI_EMBEDDING_MODEL") or default_embedding_model
 
         ttl_days_raw: str = (os.getenv("CHAT_HISTORY_TTL_DAYS") or "").strip()
         ttl_days: int = 30
@@ -47,15 +62,69 @@ class ChatbotEngine:
         
         self.patent_flattened = []
         self.patent_index = {}
+        self.patent_text_by_app_no: dict[str, str] = {}
         self.is_initialized = False
         self.logger = logging.getLogger(__name__)
         self.logger.info(
-            "chatbot_engine_config db_name=%s collection=%s mongo_uri=%s qdrant_collection=%s",
+            "chatbot_engine_config db_name=%s collection=%s mongo_uri=%s qdrant_url=%s qdrant_collection=%s",
             self.db_name,
             self.mongo_collection_name,
             self._mask_mongo_uri(self.mongo_uri),
+            self.qdrant_url,
             self.qdrant_collection_name,
         )
+
+    def _is_running_in_docker(self) -> bool:
+        if os.path.exists("/.dockerenv"):
+            return True
+        env_raw: str = (os.getenv("RUNNING_IN_DOCKER") or "").strip().lower()
+        return env_raw in ["1", "true", "yes", "y", "on"]
+
+    def _is_truthy_env(self, name: str) -> bool:
+        raw: str = (os.getenv(name) or "").strip().lower()
+        return raw in ["1", "true", "yes", "y", "on"]
+
+    def _require_qdrant_url(self, raw_url: str | None) -> str:
+        url: str = (raw_url or "").strip()
+        if not url:
+            raise RuntimeError("QDRANT_URL is required (set it to your Qdrant Cloud URL).")
+        if "://" not in url:
+            # Default to HTTPS for cloud endpoints.
+            url = "https://" + url
+        host: str = urlsplit(url).hostname or ""
+        if host in ["127.0.0.1", "localhost"] and not self._is_truthy_env("ALLOW_LOCAL_QDRANT"):
+            raise RuntimeError(
+                "QDRANT_URL points to a local host. Set it to your Qdrant Cloud URL, "
+                "or set ALLOW_LOCAL_QDRANT=true to explicitly allow local Qdrant."
+            )
+        if host == "qdrant" and not self._is_running_in_docker():
+            raise RuntimeError(
+                "QDRANT_URL uses the docker hostname 'qdrant'. Use your Qdrant Cloud URL for local runs."
+            )
+        return url
+
+    def _require_qdrant_api_key(self, qdrant_url: str, api_key: str | None) -> str | None:
+        host: str = urlsplit(qdrant_url).hostname or ""
+        if host in ["127.0.0.1", "localhost"]:
+            return api_key
+        key: str = (api_key or "").strip()
+        if not key:
+            raise RuntimeError("QDRANT_API_KEY is required for Qdrant Cloud.")
+        return key
+
+    def _resolve_local_mongo_uri(self, raw_uri: str | None, docker_hostname: str, default_uri: str) -> str:
+        if not raw_uri:
+            return default_uri
+        uri: str = raw_uri.strip()
+        if not uri:
+            return default_uri
+        try:
+            host: str = urlsplit(uri).hostname or ""
+            if host == docker_hostname and not self._is_running_in_docker():
+                return default_uri
+            return uri
+        except Exception:
+            return default_uri
 
     def _mask_mongo_uri(self, mongo_uri: str | None) -> str:
         if not mongo_uri:
@@ -72,6 +141,23 @@ class ChatbotEngine:
         except Exception:
             return "<UNPARSEABLE_URI>"
 
+    def _log_match_detail(self, fmt: str, *args: object) -> None:
+        #시스템 로거에 기록 
+        try:
+            self.logger.info(fmt, *args)
+        except Exception:
+            pass
+        #환경변수 설정 확인 
+        stdout_raw: str = (os.getenv("MATCH_DETAIL_STDOUT") or "true").strip().lower()
+        should_stdout: bool = stdout_raw in ["1", "true", "yes", "y", "on"]
+        if not should_stdout:
+            return
+            # 포맷팅 처리 Fallback 처리
+        try:
+            print(fmt % args)
+        except Exception:
+            print(fmt, args)
+
 
     # ===========================================================
     # 1. 초기화 및 유틸리티 
@@ -79,6 +165,7 @@ class ChatbotEngine:
     async def initialize(self):
         # Ensure indexes exist even if we skip patent initialization.
         await self._ensure_chat_history_indexes()
+        await asyncio.to_thread(self._ensure_qdrant_collection_exists)
 
         # 이미 초기화된 경우 바로 리턴
         if self.is_initialized and len(self.patent_index) > 0:
@@ -127,6 +214,7 @@ class ChatbotEngine:
 
             self.patent_flattened = []
             self.patent_index = {}
+            self.patent_text_by_app_no = {}
 
             for p in all_patents:
                 raw_no = p.get("applicationNumber") or p.get("app_no")
@@ -141,6 +229,7 @@ class ChatbotEngine:
                     self.patent_index[app_no] = p
                     context_text = self.build_patent_context_ko(p)
                     self.patent_flattened.append({"app_no": app_no, "text": context_text})
+                    self.patent_text_by_app_no[app_no] = context_text
 
             self.is_initialized = True
             elapsed_ms: float = (time.perf_counter() - start_time_s) * 1000.0
@@ -153,6 +242,29 @@ class ChatbotEngine:
             self.logger.exception("chatbot_engine_initialize_error err=%r", e)
             # 초기화 실패 시 is_initialized는 그대로 False 유지
             return
+
+    def _ensure_qdrant_collection_exists(self) -> None:
+        try:
+            collections = self.client_qdrant.get_collections()
+            exists = any(c.name == self.qdrant_collection_name for c in collections.collections)
+            if exists:
+                return
+            self.client_qdrant.create_collection(
+                collection_name=self.qdrant_collection_name,
+                vectors_config=VectorParams(size=self.qdrant_vector_size, distance=Distance.COSINE),
+            )
+            self.logger.warning(
+                "qdrant_collection_created collection=%s vector_size=%d (run backend/scripts/sync_qdrant.py to populate)",
+                self.qdrant_collection_name,
+                self.qdrant_vector_size,
+            )
+        except Exception as e:
+            self.logger.warning(
+                "qdrant_collection_ensure_failed collection=%s qdrant_url=%s err=%r",
+                self.qdrant_collection_name,
+                self.qdrant_url,
+                e,
+            )
 
 
     def normalize_application_number(self, app_no):
@@ -320,7 +432,7 @@ class ChatbotEngine:
         try:
             self.logger.debug("keyword_extract_start request_id=%s query=%r", request_id, query)
             resp = self.client_openai.chat.completions.create(
-                model=self.chat_model, 
+                model=self.keyword_model,
                 messages=[{
                     "role": "user",
                     "content": f"다음 문장에서 특허 검색용 키워드만 '단어:가중치' 형식으로 추출하세요.\n"
@@ -354,8 +466,26 @@ class ChatbotEngine:
     def qdrant_search_app_number(self, query: str, limit: int):
         request_id: str = uuid.uuid4().hex[:10]
         start_time_s: float = time.perf_counter()
-        emb = self.client_openai.embeddings.create(model="text-embedding-3-large", input=query)
+        emb = self.client_openai.embeddings.create(model=self.embedding_model, input=query)
         vector = emb.data[0].embedding
+        if len(vector) != self.qdrant_vector_size:
+            fallback_model: str = "text-embedding-3-large" if self.qdrant_vector_size == 3072 else "text-embedding-3-small"
+            if fallback_model != self.embedding_model:
+                self.logger.warning(
+                    "qdrant_vector_dim_mismatch ID=%s expected=%d got=%d model=%s; retry_with=%s",
+                    request_id,
+                    self.qdrant_vector_size,
+                    len(vector),
+                    self.embedding_model,
+                    fallback_model,
+                )
+                emb = self.client_openai.embeddings.create(model=fallback_model, input=query)
+                vector = emb.data[0].embedding
+        if len(vector) != self.qdrant_vector_size:
+            raise RuntimeError(
+                f"Qdrant vector dimension mismatch: expected {self.qdrant_vector_size}, got {len(vector)} "
+                f"(embedding_model={self.embedding_model})"
+            )
         results = self.client_qdrant.query_points(
             collection_name=self.qdrant_collection_name,
             query=vector,
@@ -424,16 +554,18 @@ class ChatbotEngine:
         if not candidates:
             return []
 
-        # 3) patent_flattened에서 app_no -> text 매핑
-        text_map_start: float = time.perf_counter()
-        text_map = {p["app_no"]: p["text"] for p in self.patent_flattened}
-        text_map_ms: float = (time.perf_counter() - text_map_start) * 1000.0
-        self._log_match_detail(
-            "[MATCH_DETAIL] ID=%s step=prepare_text_map elapsed_ms=%.1f size=%d",
-            request_id or "-",
-            text_map_ms,
-            len(text_map),
-        )
+        text_map = self.patent_text_by_app_no
+        if not text_map and self.patent_flattened:
+            text_map_start: float = time.perf_counter()
+            text_map = {p["app_no"]: p["text"] for p in self.patent_flattened}
+            self.patent_text_by_app_no = text_map
+            text_map_ms: float = (time.perf_counter() - text_map_start) * 1000.0
+            self._log_match_detail(
+                "[MATCH_DETAIL] ID=%s step=prepare_text_map elapsed_ms=%.1f size=%d",
+                request_id or "-",
+                text_map_ms,
+                len(text_map),
+            )
 
         # 4) 키워드 가중치 기반 스코어 계산
         rescore_start: float = time.perf_counter()
@@ -454,12 +586,17 @@ class ChatbotEngine:
             scored.append((score, app_no))
 
         rescore_ms: float = (time.perf_counter() - rescore_start) * 1000.0
+        top_scores_preview: str = ""
+        if scored:
+            top_3 = sorted(scored, key=lambda x: x[0], reverse=True)[:3]
+            top_scores_preview = " | top3=" + ", ".join([f"{app_no}:{score:.2f}" for score, app_no in top_3])
         self._log_match_detail(
-            "[MATCH_DETAIL] ID=%s step=keyword_rescore elapsed_ms=%.1f docs=%d keywords=%d",
+            "[MATCH_DETAIL] ID=%s step=keyword_rescore elapsed_ms=%.1f docs=%d keywords=%d%s",
             request_id or "-",
             rescore_ms,
             len(candidates),
             len(weighted_keywords),
+            top_scores_preview,
         )
 
         # 키워드 기반 스코어를 전혀 못 만든 경우 → Mongo 순서대로 사용
@@ -482,19 +619,55 @@ class ChatbotEngine:
         request_id: str = uuid.uuid4().hex[:10]
         start_time = time.perf_counter()
 
+        qdrant_timeout_s_raw: str = (os.getenv("QDRANT_TIMEOUT_SECONDS") or "").strip()
+        qdrant_timeout_s: float = 10.0
+        try:
+            if qdrant_timeout_s_raw:
+                qdrant_timeout_s = float(qdrant_timeout_s_raw)
+        except Exception:
+            qdrant_timeout_s = 10.0
+        if qdrant_timeout_s <= 0:
+            qdrant_timeout_s = 10.0
+
+        async def executeQdrantCandidateSearch() -> tuple[list[str], float]:
+            qdrant_call_start: float = time.perf_counter()
+            try:
+                apps: list[str] = await asyncio.wait_for(
+                    asyncio.to_thread(self.qdrant_search_app_number, query, target_k * 3),
+                    timeout=qdrant_timeout_s,
+                )
+                qdrant_call_ms: float = (time.perf_counter() - qdrant_call_start) * 1000.0
+                return apps, qdrant_call_ms
+            except asyncio.TimeoutError:
+                self.logger.warning(
+                    "[HYBRID] qdrant_search_timeout ID=%s timeout_s=%.1f",
+                    request_id,
+                    qdrant_timeout_s,
+                )
+                qdrant_call_ms: float = (time.perf_counter() - qdrant_call_start) * 1000.0
+                return [], qdrant_call_ms
+            except Exception as e:
+                self.logger.exception(
+                    f"[HYBRID] Qdrant search failed ID={request_id} err={e!r}"
+                )
+                qdrant_call_ms: float = (time.perf_counter() - qdrant_call_start) * 1000.0
+                return [], qdrant_call_ms
+
+        qdrant_task: asyncio.Task[tuple[list[str], float]] = asyncio.create_task(executeQdrantCandidateSearch())
+
         # -----------------------------------------------------------
         # 1. 키워드 추출 (LLM)
         # -----------------------------------------------------------
         match_start = time.perf_counter()
         keyword_timeout_s_raw: str = (os.getenv("OPENAI_KEYWORD_TIMEOUT_SECONDS") or "").strip()
-        keyword_timeout_s: float = 15.0
+        keyword_timeout_s: float = 2.0
         try:
             if keyword_timeout_s_raw:
                 keyword_timeout_s = float(keyword_timeout_s_raw)
         except Exception:
-            keyword_timeout_s = 15.0
+            keyword_timeout_s = 2.0
         if keyword_timeout_s <= 0:
-            keyword_timeout_s = 15.0
+            keyword_timeout_s = 2.0
         kw_llm_start: float = time.perf_counter()
         try:
             weighted_keywords = await asyncio.wait_for(
@@ -509,11 +682,15 @@ class ChatbotEngine:
             )
             weighted_keywords = []
         kw_llm_ms: float = (time.perf_counter() - kw_llm_start) * 1000.0
+        keywords_preview: str = ", ".join([f"{k}:{w:.1f}" for k, w in weighted_keywords[:5]])
+        if len(weighted_keywords) > 5:
+            keywords_preview += f" ... (+{len(weighted_keywords) - 5} more)"
         self._log_match_detail(
-            "[MATCH_DETAIL] ID=%s step=keyword_llm elapsed_ms=%.1f keywords=%d",
+            "[MATCH_DETAIL] ID=%s step=keyword_llm elapsed_ms=%.1f keywords=%d extracted=%s",
             request_id,
             kw_llm_ms,
             len(weighted_keywords),
+            keywords_preview if weighted_keywords else "none",
         )
 
         # 1단계: Mongo 기반 MATCH (limit*2 후보 → 키워드 재랭킹 → limit*2/3 사용)
@@ -537,59 +714,30 @@ class ChatbotEngine:
         # -----------------------------------------------------------
         # 2. Qdrant에서 남은 개수 채우기
         # -----------------------------------------------------------
-        qdrant_start = time.perf_counter()
-
         remaining = max(0, target_k - len(mongo_apps))
         qdrant_apps: list[str] = []
+        qdrant_elapsed: float = 0.0
 
         if remaining > 0:
-            try:
-                # 중복 제거를 위해 넉넉히 가져온 뒤 필터링
-                qdrant_timeout_s_raw: str = (os.getenv("QDRANT_TIMEOUT_SECONDS") or "").strip()
-                qdrant_timeout_s: float = 10.0
+            qdrant_raw, qdrant_elapsed = await qdrant_task
+            used = set(mongo_apps)
+            for app_no in qdrant_raw:
+                app_no = self.normalize_application_number(app_no)
+                if not app_no:
+                    continue
+                if app_no in used:
+                    continue
+                used.add(app_no)
+                qdrant_apps.append(app_no)
+                if len(qdrant_apps) >= remaining:
+                    break
+        else:
+            if not qdrant_task.done():
+                qdrant_task.cancel()
                 try:
-                    if qdrant_timeout_s_raw:
-                        qdrant_timeout_s = float(qdrant_timeout_s_raw)
+                    await qdrant_task
                 except Exception:
-                    qdrant_timeout_s = 10.0
-                if qdrant_timeout_s <= 0:
-                    qdrant_timeout_s = 10.0
-                qdrant_raw = await asyncio.wait_for(
-                    asyncio.to_thread(
-                        self.qdrant_search_app_number,
-                        query,
-                        target_k * 3,  # limit
-                    ),
-                    timeout=qdrant_timeout_s,
-                )
-
-                used = set(mongo_apps)
-                for app_no in qdrant_raw:
-                    app_no = self.normalize_application_number(app_no)
-                    if not app_no:
-                        continue
-                    if app_no in used:
-                        # 3번 요구사항: Mongo 결과와 겹치는 특허는 제외
-                        continue
-                    used.add(app_no)
-                    qdrant_apps.append(app_no)
-                    if len(qdrant_apps) >= remaining:
-                        break
-
-            except Exception as e:
-                self.logger.exception(
-                    f"[HYBRID] Qdrant search failed ID={request_id} err={e!r}"
-                )
-                qdrant_apps = []
-            except asyncio.TimeoutError:
-                self.logger.warning(
-                    "[HYBRID] qdrant_search_timeout ID=%s timeout_s=%.1f",
-                    request_id,
-                    qdrant_timeout_s,
-                )
-                qdrant_apps = []
-
-        qdrant_elapsed = (time.perf_counter() - qdrant_start) * 1000.0
+                    pass
 
         # -----------------------------------------------------------
         # 3. 최종 app_no 리스트 구성 (중복 없이 최대 target_k개)
@@ -763,18 +911,22 @@ class ChatbotEngine:
         await collection.update_one(
             {"session_id": session_id},
             {
-    
                 "$setOnInsert": {
                     "session_id": session_id,
                     "created_at": now_dt,
-                    "messages": [
-                        {"role": "user", "content": user_query, "timestamp": time.time()},
-                        {"role": "assistant", "content": ai_answer, "timestamp": time.time()},
-                    ],
+                    # Title should come from the first user prompt only.
+                    "title": title,
+                },
+                "$push": {
+                    "messages": {
+                        "$each": [
+                            {"role": "user", "content": user_query, "timestamp": time.time()},
+                            {"role": "assistant", "content": ai_answer, "timestamp": time.time()},
+                        ]
+                    }
                 },
                 "$set": {
                     "updated_at": now_dt,
-                    "title": title,
                     # Refresh TTL based on latest activity (expire N days after last use)
                     "expires_at": now_dt + timedelta(days=self.chat_history_ttl_days),
                 },

@@ -6,9 +6,33 @@ import re
 import logging
 import time
 import uuid
+from urllib.parse import urlsplit
 
 router = APIRouter(tags=["특허 API"])
 logger = logging.getLogger(__name__)
+
+def _is_running_in_docker() -> bool:
+    if os.path.exists("/.dockerenv"):
+        return True
+    env_raw: str = (os.getenv("RUNNING_IN_DOCKER") or "").strip().lower()
+    return env_raw in ["1", "true", "yes", "y", "on"]
+
+def _resolve_local_elasticsearch_url(raw_url: str | None) -> str:
+    default_url: str = "http://127.0.0.1:9200"
+    if not raw_url:
+        return default_url
+    normalized_url: str = raw_url.strip()
+    if not normalized_url:
+        return default_url
+    if "://" not in normalized_url:
+        normalized_url = "http://" + normalized_url
+    try:
+        host: str = urlsplit(normalized_url).hostname or ""
+        if host == "elasticsearch" and not _is_running_in_docker():
+            return default_url
+        return normalized_url
+    except Exception:
+        return default_url
 
 def _parse_and_or_query(field: str, query_str: str):
     """
@@ -54,7 +78,7 @@ def _parse_and_or_query(field: str, query_str: str):
     return {"match": {field: query_str}}
 
 # Elasticsearch 클라이언트 설정
-elasticsearch_url = os.getenv("ELASTICSEARCH_URL", "http://127.0.0.1:9200")
+elasticsearch_url = _resolve_local_elasticsearch_url(os.getenv("ELASTICSEARCH_URL"))
 es = AsyncElasticsearch(
     elasticsearch_url,
     verify_certs=False,
