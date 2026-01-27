@@ -5,12 +5,13 @@ import logging
 import time
 import uuid
 import json
+from datetime import datetime, timedelta
 from urllib.parse import urlsplit, urlunsplit
 from dotenv import load_dotenv
 from openai import OpenAI
 from qdrant_client import QdrantClient
+from qdrant_client.models import Distance, VectorParams
 from motor.motor_asyncio import AsyncIOMotorClient
-from datetime import datetime, timedelta
 
 class ChatbotEngine:
     def __init__(self):
@@ -18,9 +19,33 @@ class ChatbotEngine:
         root_dir: str = os.path.abspath(os.path.join(backend_dir, ".."))
         root_env_path: str = os.path.join(root_dir, ".env")
         backend_env_path: str = os.path.join(backend_dir, ".env")
-        load_dotenv(dotenv_path=root_env_path)
-        load_dotenv(dotenv_path=backend_env_path, override=True)
-        load_dotenv(override=True)
+        load_dotenv(dotenv_path=root_env_path, override=False)
+        load_dotenv(dotenv_path=backend_env_path, override=False)
+        self.openai_key = os.getenv("OPENAI_API_KEY")
+        self.qdrant_url = self._require_qdrant_url(os.getenv("QDRANT_URL"))
+        self.qdrant_api_key = self._require_qdrant_api_key(
+            qdrant_url=self.qdrant_url,
+            api_key=os.getenv("QDRANT_API_KEY"),
+        )
+        self.mongo_uri = self._resolve_local_mongo_uri(
+            raw_uri=os.getenv("MONGODB_URI") or os.getenv("MONGO_URI"),
+            docker_hostname="mongo",
+            default_uri="mongodb://127.0.0.1:27017",
+        )
+        self.chat_model = os.getenv("OPENAI_CHAT_MODEL") or "gpt-5"
+        
+        self.db_name = os.getenv("DB_NAME") or "moaai_db"
+        self.mongo_collection_name = os.getenv("PATENTS_COLLECTION_NAME") or "patents"
+        self.qdrant_collection_name = "patent"
+        self.qdrant_vector_size: int = int(os.getenv("QDRANT_VECTOR_SIZE") or 3072)
+        # Use faster/cheaper models for retrieval helpers by default.
+        # These can be overridden via environment variables.
+        self.keyword_model = os.getenv("OPENAI_KEYWORD_MODEL") or "gpt-4o-mini"
+        default_embedding_model: str = (
+            "text-embedding-3-small" if self.qdrant_vector_size == 1536 else "text-embedding-3-large"
+        )
+        self.embedding_model = os.getenv("OPENAI_EMBEDDING_MODEL") or default_embedding_model
+
         ttl_days_raw: str = (os.getenv("CHAT_HISTORY_TTL_DAYS") or "").strip()
         ttl_days: int = 30
         if ttl_days_raw.isdigit():
@@ -28,15 +53,6 @@ class ChatbotEngine:
         if ttl_days < 1:
             ttl_days = 30
         self.chat_history_ttl_days: int = ttl_days
-        self.openai_key = os.getenv("OPENAI_API_KEY")
-        self.qdrant_url = os.getenv("QDRANT_URL")
-        self.qdrant_api_key = os.getenv("QDRANT_API_KEY")
-        self.mongo_uri = os.getenv("MONGODB_URI") or os.getenv("MONGO_URI")
-        self.chat_model = os.getenv("OPENAI_CHAT_MODEL") or "gpt-5"
-        
-        self.db_name = os.getenv("DB_NAME") or "moaai_db"
-        self.mongo_collection_name = os.getenv("PATENTS_COLLECTION_NAME") or "patents"
-        self.qdrant_collection_name = "patent"
         
        
         self.client_openai = OpenAI(api_key=self.openai_key)
@@ -46,15 +62,69 @@ class ChatbotEngine:
         
         self.patent_flattened = []
         self.patent_index = {}
+        self.patent_text_by_app_no: dict[str, str] = {}
         self.is_initialized = False
         self.logger = logging.getLogger(__name__)
         self.logger.info(
-            "chatbot_engine_config db_name=%s collection=%s mongo_uri=%s qdrant_collection=%s",
+            "chatbot_engine_config db_name=%s collection=%s mongo_uri=%s qdrant_url=%s qdrant_collection=%s",
             self.db_name,
             self.mongo_collection_name,
             self._mask_mongo_uri(self.mongo_uri),
+            self.qdrant_url,
             self.qdrant_collection_name,
         )
+
+    def _is_running_in_docker(self) -> bool:
+        if os.path.exists("/.dockerenv"):
+            return True
+        env_raw: str = (os.getenv("RUNNING_IN_DOCKER") or "").strip().lower()
+        return env_raw in ["1", "true", "yes", "y", "on"]
+
+    def _is_truthy_env(self, name: str) -> bool:
+        raw: str = (os.getenv(name) or "").strip().lower()
+        return raw in ["1", "true", "yes", "y", "on"]
+
+    def _require_qdrant_url(self, raw_url: str | None) -> str:
+        url: str = (raw_url or "").strip()
+        if not url:
+            raise RuntimeError("QDRANT_URL is required (set it to your Qdrant Cloud URL).")
+        if "://" not in url:
+            # Default to HTTPS for cloud endpoints.
+            url = "https://" + url
+        host: str = urlsplit(url).hostname or ""
+        if host in ["127.0.0.1", "localhost"] and not self._is_truthy_env("ALLOW_LOCAL_QDRANT"):
+            raise RuntimeError(
+                "QDRANT_URL points to a local host. Set it to your Qdrant Cloud URL, "
+                "or set ALLOW_LOCAL_QDRANT=true to explicitly allow local Qdrant."
+            )
+        if host == "qdrant" and not self._is_running_in_docker():
+            raise RuntimeError(
+                "QDRANT_URL uses the docker hostname 'qdrant'. Use your Qdrant Cloud URL for local runs."
+            )
+        return url
+
+    def _require_qdrant_api_key(self, qdrant_url: str, api_key: str | None) -> str | None:
+        host: str = urlsplit(qdrant_url).hostname or ""
+        if host in ["127.0.0.1", "localhost"]:
+            return api_key
+        key: str = (api_key or "").strip()
+        if not key:
+            raise RuntimeError("QDRANT_API_KEY is required for Qdrant Cloud.")
+        return key
+
+    def _resolve_local_mongo_uri(self, raw_uri: str | None, docker_hostname: str, default_uri: str) -> str:
+        if not raw_uri:
+            return default_uri
+        uri: str = raw_uri.strip()
+        if not uri:
+            return default_uri
+        try:
+            host: str = urlsplit(uri).hostname or ""
+            if host == docker_hostname and not self._is_running_in_docker():
+                return default_uri
+            return uri
+        except Exception:
+            return default_uri
 
     def _mask_mongo_uri(self, mongo_uri: str | None) -> str:
         if not mongo_uri:
@@ -70,6 +140,24 @@ class ChatbotEngine:
             return urlunsplit((parts.scheme, masked_netloc, parts.path, parts.query, parts.fragment))
         except Exception:
             return "<UNPARSEABLE_URI>"
+
+    def _log_match_detail(self, fmt: str, *args: object) -> None:
+        #시스템 로거에 기록 
+        try:
+            self.logger.info(fmt, *args)
+        except Exception:
+            pass
+        #환경변수 설정 확인 
+        stdout_raw: str = (os.getenv("MATCH_DETAIL_STDOUT") or "true").strip().lower()
+        should_stdout: bool = stdout_raw in ["1", "true", "yes", "y", "on"]
+        if not should_stdout:
+            return
+            # 포맷팅 처리 Fallback 처리
+        try:
+            print(fmt % args)
+        except Exception:
+            print(fmt, args)
+
 
     # ===========================================================
     # 1. 초기화 및 유틸리티 
@@ -102,21 +190,6 @@ class ChatbotEngine:
                 self.logger.info("Successfully created wildcard text index ($**)")
             except Exception as e:
                 self.logger.error("Index recreation failed: %r", e)
-            # try:
-        #     collection = self.db[self.mongo_collection_name]
-
-        #     # Ensure MongoDB text index exists (best-effort).
-        #     try:
-        #         await collection.create_index(
-        #             [("$**", "text")],
-        #             name="patent_text_search_index",
-        #         )
-                # await collection.create_index(
-                #     [("title", "text"), ("abstract", "text"), ("claims.text", "text")],
-                #     name="patent_text_search_index",
-                # )
-            # except Exception as e:
-            #     self.logger.debug("chatbot_engine_create_text_index_failed err=%r", e)
 
             estimated_count: int = await collection.estimated_document_count()
             self.logger.info(
@@ -174,6 +247,29 @@ class ChatbotEngine:
             self.logger.exception("chatbot_engine_initialize_error err=%r", e)
             # 초기화 실패 시 is_initialized는 그대로 False 유지
             return
+
+    def _ensure_qdrant_collection_exists(self) -> None:
+        try:
+            collections = self.client_qdrant.get_collections()
+            exists = any(c.name == self.qdrant_collection_name for c in collections.collections)
+            if exists:
+                return
+            self.client_qdrant.create_collection(
+                collection_name=self.qdrant_collection_name,
+                vectors_config=VectorParams(size=self.qdrant_vector_size, distance=Distance.COSINE),
+            )
+            self.logger.warning(
+                "qdrant_collection_created collection=%s vector_size=%d (run backend/scripts/sync_qdrant.py to populate)",
+                self.qdrant_collection_name,
+                self.qdrant_vector_size,
+            )
+        except Exception as e:
+            self.logger.warning(
+                "qdrant_collection_ensure_failed collection=%s qdrant_url=%s err=%r",
+                self.qdrant_collection_name,
+                self.qdrant_url,
+                e,
+            )
 
 
     def normalize_application_number(self, app_no):
@@ -341,34 +437,53 @@ class ChatbotEngine:
         try:
             self.logger.debug("keyword_extract_start request_id=%s query=%r", request_id, query)
             resp = self.client_openai.chat.completions.create(
-                model=self.chat_model, 
-                messages=[{
-                    "role": "user",
-                    "content": f"다음 문장에서 특허 검색용 키워드만 '단어:가중치' 형식으로 추출하세요.\n"
-                    "규칙:\n"
-                    "- 특허 DB에서 검색 필드(ex 출원인/발명자/기술명 등)로 바로 사용할 수 있는 단어만 포함 \n"
-                    "- 질문 결과를 설명하기 위한 단어(ex 개수, 이름, 무엇, 몇 개 등)는 절대 포함하지 말 것\n"
-                    "- 출원인·발명자 이름이 존재할 경우 최우선\n"
-                    "- 오타, 띄어쓰기 실수 등으로 보이는 것은 정제하여 추출\n"
-                    "- 문장에 실제 등장한 단어만 사용\n"
-                    "- 조사/어미 제거\n"
-                    "- 가중치는 0~1 (0.1 단위)\n"
-                    "- 형식: 단어:가중치\n" 
-                    "- 줄바꿈으로 구분\n"
-                    "- 설명 없이 출력\n"
-                  f"문장: {query}"
-                }]
+                model="gpt-5",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": (
+                            "다음 문장에서 특허 검색에 **직접 사용되는 검색 조건 키워드만** 추출하세요.\n"
+                            "규칙:\n"
+                            "- 특허 DB에서 검색 필드(ex 출원인/발명자/기술명 등)로 바로 사용할 수 있는 단어만 포함 \n"
+                            "- 질문 결과를 설명하기 위한 단어(ex 개수, 이름, 무엇, 몇 개 등)는 절대 포함하지 말 것\n"
+                            "- 출원인·발명자 이름·출원번호가 존재할 경우 최우선\n"
+                            "- 질문에 오타, 띄어쓰기 오류, 한영변환 오류 등으로 추정되는 것이 있다면 정제하여 답하세요.\n"
+                            "- 문장에 실제 등장한 단어나 숫자만 사용\n"
+                            "- 조사/어미 제거\n"
+                            "- 가중치는 0~1(0.1 단위)\n"
+                            "- 형식: 단어:가중치\n"
+                            "- 줄바꿈으로 구분\n"
+                            "- 설명 없이 출력\n"
+
+                            f"문장: {query}"
+                        ),
+                    }
+                ],
             )
             raw = resp.choices[0].message.content.strip()
-            weighted_keywords = []
+            print("###################### 키워드 추출 결과 ######################")
+            print(raw)
+            print("########################################################")
+            weighted_keywords: list[tuple[str, float]] = []
             for line in raw.splitlines():
-                if ":" in line:
-                    parts = line.split(":")
-                    if len(parts) == 2:
-                        weighted_keywords.append((parts[0].strip(), float(parts[1].strip())))
+                line = line.strip()
+                if ":" not in line:
+                    continue
+                k, w = line.rsplit(":", 1)
+                try:
+                    weight_val: float = float(w.strip())
+                except ValueError:
+                    continue
+                weighted_keywords.append((k.strip(), weight_val))
             elapsed_ms: float = (time.perf_counter() - start_time_s) * 1000.0
             raw_preview: str = (raw[:500] + "...") if len(raw) > 500 else raw
-            print(f"[로그]",{weighted_keywords[0], weighted_keywords[1], weighted_keywords[2]})
+            self.logger.debug(
+                "keyword_extract_done request_id=%s elapsed_ms=%.1f keywords=%d preview=%r",
+                request_id,
+                elapsed_ms,
+                len(weighted_keywords),
+                raw_preview,
+            )
             return weighted_keywords
         except Exception as e:
             self.logger.exception("keyword_extract_error request_id=%s err=%r", request_id, e)
@@ -377,8 +492,26 @@ class ChatbotEngine:
     def qdrant_search_app_number(self, query: str, limit: int):
         request_id: str = uuid.uuid4().hex[:10]
         start_time_s: float = time.perf_counter()
-        emb = self.client_openai.embeddings.create(model="text-embedding-3-large", input=query)
+        emb = self.client_openai.embeddings.create(model=self.embedding_model, input=query)
         vector = emb.data[0].embedding
+        if len(vector) != self.qdrant_vector_size:
+            fallback_model: str = "text-embedding-3-large" if self.qdrant_vector_size == 3072 else "text-embedding-3-small"
+            if fallback_model != self.embedding_model:
+                self.logger.warning(
+                    "qdrant_vector_dim_mismatch ID=%s expected=%d got=%d model=%s; retry_with=%s",
+                    request_id,
+                    self.qdrant_vector_size,
+                    len(vector),
+                    self.embedding_model,
+                    fallback_model,
+                )
+                emb = self.client_openai.embeddings.create(model=fallback_model, input=query)
+                vector = emb.data[0].embedding
+        if len(vector) != self.qdrant_vector_size:
+            raise RuntimeError(
+                f"Qdrant vector dimension mismatch: expected {self.qdrant_vector_size}, got {len(vector)} "
+                f"(embedding_model={self.embedding_model})"
+            )
         results = self.client_qdrant.query_points(
             collection_name=self.qdrant_collection_name,
             query=vector,
@@ -389,59 +522,11 @@ class ChatbotEngine:
         elapsed_ms: float = (time.perf_counter() - start_time_s) * 1000.0
         return app_numbers
 
-    # async def simple_match_search_app_number(self, weighted_keywords, limit):
-    #     if not weighted_keywords:
-    #         return []
-
-    #     search_terms = " ".join([k for k, _ in weighted_keywords if k])
-    #     collection = self.db[self.mongo_collection_name]
-        
-    #     print(f"\n[DIAGNOSIS START] ---------------------------")
-    #     print(f"1. Target Collection: {self.db_name}.{self.mongo_collection_name}")
-    #     print(f"2. Search Terms: '{search_terms}'")
-
-    #     # 검증 1: 컬렉션에 데이터가 실제로 들어있는가?
-    #     doc_count = await collection.count_documents({})
-    #     print(f"3. Total Docs in Collection: {doc_count}")
-
-    #     # 검증 2: 텍스트 인덱스가 정상적으로 존재하는가?
-    #     indices = await collection.index_information()
-    #     has_text_index = any(idx.get('key', [('', '')])[0][1] == 'text' for idx in indices.values())
-    #     print(f"4. Text Index Exist: {has_text_index}")
-    #     if not has_text_index:
-    #         print("   !! WARNING: 텍스트 인덱스가 없습니다. $text 검색이 불가능합니다.")
-
-    #     # 검증 3: 인덱스 없이 '생' 쿼리로 데이터가 찾아지는가? (데이터 존재 유무 최종 확인)
-    #     first_keyword = weighted_keywords[0][0]
-    #     sample_regex = await collection.find_one({"$or": [
-    #         {"title": {"$regex": first_keyword}},
-    #         {"inventors.name": {"$regex": first_keyword}},
-    #         {"applicant.name": {"$regex": first_keyword}}
-    #     ]})
-    #     print(f"5. Regex Sample Check ('{first_keyword}'): {'FOUND' if sample_regex else 'NOT FOUND'}")
-
-    #     # 실제 쿼리 실행
-    #     mongo_limit = limit * 2
-    #     try:
-    #         cursor = collection.find(
-    #             {"$text": {"$search": search_terms}},
-    #             {"score": {"$meta": "textScore"}, "applicationNumber": 1}
-    #         ).sort([("score", {"$meta": "textScore"})]).limit(mongo_limit)
-
-    #         results = await cursor.to_list(length=mongo_limit)
-    #         print(f"6. Final $text Search Results: {len(results)} items")
-    #     except Exception as e:
-    #         print(f"7. Error during $text search: {e}")
-    #         results = []
-
-    #     print(f"[DIAGNOSIS END] -----------------------------\n")
-
-    #     return [self.normalize_application_number(r.get("applicationNumber")) for r in results if r.get("applicationNumber")]
-
     async def simple_match_search_app_number(
         self,
         weighted_keywords: list[tuple[str, float]],
         limit: int,
+        request_id: str | None = None,
     ) -> list[str]:
         """
         1. MongoDB $text로 limit*2 개수만큼 후보를 가져온 뒤
@@ -456,11 +541,12 @@ class ChatbotEngine:
         search_terms = " ".join([k for k, _ in weighted_keywords if k])
         if not search_terms:
             return []
-        print("f[로그] search_terms",{search_terms})
+
         collection = self.db[self.mongo_collection_name]
 
         # 2) Mongo에서 limit의 2배만큼 후보 가져오기 (textScore 순)
         mongo_limit = limit * 2
+        mongo_find_start: float = time.perf_counter()
         cursor = collection.find(
             {"$text": {"$search": search_terms}},
             {
@@ -468,11 +554,17 @@ class ChatbotEngine:
                 "applicationNumber": 1,
             },
         ).sort([("score", {"$meta": "textScore"})]).limit(mongo_limit)
-        
 
         results = await cursor.to_list(length=mongo_limit)
+        mongo_find_ms: float = (time.perf_counter() - mongo_find_start) * 1000.0
+        self._log_match_detail(
+            "[MATCH_DETAIL] ID=%s step=mongo_text_search elapsed_ms=%.1f candidates=%d search_terms=%r",
+            request_id or "-",
+            mongo_find_ms,
+            len(results) if isinstance(results, list) else 0,
+            search_terms,
+        )
         if not results:
-            print("Results is empty")
             return []
 
         # applicationNumber 정규화 + 중복 제거
@@ -488,10 +580,21 @@ class ChatbotEngine:
         if not candidates:
             return []
 
-        # 3) patent_flattened에서 app_no -> text 매핑
-        text_map = {p["app_no"]: p["text"] for p in self.patent_flattened}
+        text_map = self.patent_text_by_app_no
+        if not text_map and self.patent_flattened:
+            text_map_start: float = time.perf_counter()
+            text_map = {p["app_no"]: p["text"] for p in self.patent_flattened}
+            self.patent_text_by_app_no = text_map
+            text_map_ms: float = (time.perf_counter() - text_map_start) * 1000.0
+            self._log_match_detail(
+                "[MATCH_DETAIL] ID=%s step=prepare_text_map elapsed_ms=%.1f size=%d",
+                request_id or "-",
+                text_map_ms,
+                len(text_map),
+            )
 
         # 4) 키워드 가중치 기반 스코어 계산
+        rescore_start: float = time.perf_counter()
         scored: list[tuple[float, str]] = []
         for app_no in candidates:
             text = text_map.get(app_no)
@@ -507,6 +610,20 @@ class ChatbotEngine:
                     score += count * weight
 
             scored.append((score, app_no))
+
+        rescore_ms: float = (time.perf_counter() - rescore_start) * 1000.0
+        top_scores_preview: str = ""
+        if scored:
+            top_3 = sorted(scored, key=lambda x: x[0], reverse=True)[:3]
+            top_scores_preview = " | top3=" + ", ".join([f"{app_no}:{score:.2f}" for score, app_no in top_3])
+        self._log_match_detail(
+            "[MATCH_DETAIL] ID=%s step=keyword_rescore elapsed_ms=%.1f docs=%d keywords=%d%s",
+            request_id or "-",
+            rescore_ms,
+            len(candidates),
+            len(weighted_keywords),
+            top_scores_preview,
+        )
 
         # 키워드 기반 스코어를 전혀 못 만든 경우 → Mongo 순서대로 사용
         max_mongo = int(limit * (2 / 3)) or 1  # 최소 1개는 가져오도록
@@ -529,18 +646,149 @@ class ChatbotEngine:
         start_time = time.perf_counter()
 
         # -----------------------------------------------------------
+        # 0. Direct-ID candidates (10~13 digits) as a BOOST signal.
+        #    Do NOT early-return: keep Mongo→Qdrant hybrid flow intact.
+        # -----------------------------------------------------------
+        id_candidates: list[str] = re.findall(r"\d{10,13}", query or "")
+        direct_app_nos: list[str] = []
+        direct_docs: dict[str, tuple[str, str, str]] = {}
+        if id_candidates:
+            direct_start: float = time.perf_counter()
+            normalized_ids: list[str] = []
+            for raw_id in id_candidates:
+                normalized: str | None = self.normalize_application_number(raw_id)
+                if normalized:
+                    normalized_ids.append(normalized)
+            seen_ids: set[str] = set()
+            unique_ids: list[str] = []
+            for v in normalized_ids:
+                if v in seen_ids:
+                    continue
+                seen_ids.add(v)
+                unique_ids.append(v)
+            for app_no in unique_ids:
+                patent: dict | None = self.patent_index.get(app_no)
+                if not patent:
+                    try:
+                        collection = self.db[self.mongo_collection_name]
+                        patent = await collection.find_one(
+                            {"$or": [{"applicationNumber": app_no}, {"app_no": app_no}]}
+                        )
+                        if patent:
+                            self.patent_index[app_no] = patent
+                    except Exception as e:
+                        self.logger.debug(
+                            "[HYBRID] direct_id_lookup_failed ID=%s app_no=%s err=%r",
+                            request_id,
+                            app_no,
+                            e,
+                        )
+                        patent = None
+                if not patent:
+                    continue
+                try:
+                    txt: str = self.build_patent_context_ko(patent)
+                    direct_app_nos.append(app_no)
+                    direct_docs[app_no] = ("DIRECT", app_no, txt)
+                except Exception as e:
+                    self.logger.debug(
+                        "[HYBRID] direct_id_context_build_failed ID=%s app_no=%s err=%r",
+                        request_id,
+                        app_no,
+                        e,
+                    )
+            if direct_app_nos:
+                direct_ms: float = (time.perf_counter() - direct_start) * 1000.0
+                self._log_match_detail(
+                    "[MATCH_DETAIL] ID=%s step=direct_id_candidates elapsed_ms=%.1f ids=%d resolved=%d ids_raw=%r",
+                    request_id,
+                    direct_ms,
+                    len(id_candidates),
+                    len(direct_app_nos),
+                    id_candidates,
+                )
+
+        qdrant_timeout_s_raw: str = (os.getenv("QDRANT_TIMEOUT_SECONDS") or "").strip()
+        qdrant_timeout_s: float = 10.0
+        try:
+            if qdrant_timeout_s_raw:
+                qdrant_timeout_s = float(qdrant_timeout_s_raw)
+        except Exception:
+            qdrant_timeout_s = 10.0
+        if qdrant_timeout_s <= 0:
+            qdrant_timeout_s = 10.0
+
+        async def executeQdrantCandidateSearch() -> tuple[list[str], float]:
+            qdrant_call_start: float = time.perf_counter()
+            try:
+                apps: list[str] = await asyncio.wait_for(
+                    asyncio.to_thread(self.qdrant_search_app_number, query, target_k * 3),
+                    timeout=qdrant_timeout_s,
+                )
+                qdrant_call_ms: float = (time.perf_counter() - qdrant_call_start) * 1000.0
+                return apps, qdrant_call_ms
+            except asyncio.TimeoutError:
+                self.logger.warning(
+                    "[HYBRID] qdrant_search_timeout ID=%s timeout_s=%.1f",
+                    request_id,
+                    qdrant_timeout_s,
+                )
+                qdrant_call_ms: float = (time.perf_counter() - qdrant_call_start) * 1000.0
+                return [], qdrant_call_ms
+            except Exception as e:
+                self.logger.exception(
+                    f"[HYBRID] Qdrant search failed ID={request_id} err={e!r}"
+                )
+                qdrant_call_ms: float = (time.perf_counter() - qdrant_call_start) * 1000.0
+                return [], qdrant_call_ms
+
+        qdrant_task: asyncio.Task[tuple[list[str], float]] = asyncio.create_task(executeQdrantCandidateSearch())
+
+        # -----------------------------------------------------------
         # 1. 키워드 추출 (LLM)
         # -----------------------------------------------------------
         match_start = time.perf_counter()
-        weighted_keywords = self.extract_weighted_keywords_llm(query)
+        keyword_timeout_s_raw: str = (os.getenv("OPENAI_KEYWORD_TIMEOUT_SECONDS") or "").strip()
+        keyword_timeout_s: float = 2.0
+        try:
+            if keyword_timeout_s_raw:
+                keyword_timeout_s = float(keyword_timeout_s_raw)
+        except Exception:
+            keyword_timeout_s = 2.0
+        if keyword_timeout_s <= 0:
+            keyword_timeout_s = 2.0
+        kw_llm_start: float = time.perf_counter()
+        try:
+            weighted_keywords = await asyncio.wait_for(
+                asyncio.to_thread(self.extract_weighted_keywords_llm, query),
+                timeout=keyword_timeout_s,
+            )
+        except asyncio.TimeoutError:
+            self.logger.warning(
+                "[HYBRID] keyword_extract_timeout ID=%s timeout_s=%.1f",
+                request_id,
+                keyword_timeout_s,
+            )
+            weighted_keywords = []
+        kw_llm_ms: float = (time.perf_counter() - kw_llm_start) * 1000.0
+        keywords_preview: str = ", ".join([f"{k}:{w:.1f}" for k, w in weighted_keywords[:5]])
+        if len(weighted_keywords) > 5:
+            keywords_preview += f" ... (+{len(weighted_keywords) - 5} more)"
+        self._log_match_detail(
+            "[MATCH_DETAIL] ID=%s step=keyword_llm elapsed_ms=%.1f keywords=%d extracted=%s",
+            request_id,
+            kw_llm_ms,
+            len(weighted_keywords),
+            keywords_preview if weighted_keywords else "none",
+        )
 
         # 1단계: Mongo 기반 MATCH (limit*2 후보 → 키워드 재랭킹 → limit*2/3 사용)
         if weighted_keywords:
             try:
-                print("[로그] weighted_keywords exist")
                 mongo_apps = await self.simple_match_search_app_number(
                     weighted_keywords,
                     target_k,
+                    request_id=request_id,
                 )
             except Exception as e:
                 self.logger.exception(
@@ -548,46 +796,37 @@ class ChatbotEngine:
                 )
                 mongo_apps = []
         else:
-            print("[로그] weighted_keywords does not exist")
             mongo_apps = []
+
         match_elapsed = (time.perf_counter() - match_start) * 1000.0
 
         # -----------------------------------------------------------
         # 2. Qdrant에서 남은 개수 채우기
         # -----------------------------------------------------------
-        qdrant_start = time.perf_counter()
-
         remaining = max(0, target_k - len(mongo_apps))
         qdrant_apps: list[str] = []
+        qdrant_elapsed: float = 0.0
 
         if remaining > 0:
-            try:
-                # 중복 제거를 위해 넉넉히 가져온 뒤 필터링
-                qdrant_raw = self.qdrant_search_app_number(
-                    query,
-                    limit=target_k * 3  # 충분히 크게
-                )
-
-                used = set(mongo_apps)
-                for app_no in qdrant_raw:
-                    app_no = self.normalize_application_number(app_no)
-                    if not app_no:
-                        continue
-                    if app_no in used:
-                        # 3번 요구사항: Mongo 결과와 겹치는 특허는 제외
-                        continue
-                    used.add(app_no)
-                    qdrant_apps.append(app_no)
-                    if len(qdrant_apps) >= remaining:
-                        break
-
-            except Exception as e:
-                self.logger.exception(
-                    f"[HYBRID] Qdrant search failed ID={request_id} err={e!r}"
-                )
-                qdrant_apps = []
-
-        qdrant_elapsed = (time.perf_counter() - qdrant_start) * 1000.0
+            qdrant_raw, qdrant_elapsed = await qdrant_task
+            used = set(mongo_apps)
+            for app_no in qdrant_raw:
+                app_no = self.normalize_application_number(app_no)
+                if not app_no:
+                    continue
+                if app_no in used:
+                    continue
+                used.add(app_no)
+                qdrant_apps.append(app_no)
+                if len(qdrant_apps) >= remaining:
+                    break
+        else:
+            if not qdrant_task.done():
+                qdrant_task.cancel()
+                try:
+                    await qdrant_task
+                except Exception:
+                    pass
 
         # -----------------------------------------------------------
         # 3. 최종 app_no 리스트 구성 (중복 없이 최대 target_k개)
@@ -596,6 +835,14 @@ class ChatbotEngine:
 
         final_app_nos: list[str] = []
         used_final = set()
+
+        # 3-0) Prepend direct-id matches (highest priority), without breaking hybrid flow.
+        for app_no in direct_app_nos:
+            if app_no and app_no in self.patent_index and app_no not in used_final:
+                used_final.add(app_no)
+                final_app_nos.append(app_no)
+                if len(final_app_nos) >= target_k:
+                    break
 
         # 먼저 Mongo 결과 (검색 품질 우선)
         for app_no in mongo_apps:
@@ -621,6 +868,10 @@ class ChatbotEngine:
         docs = []
         for app_no in final_app_nos:
             try:
+                # Use prebuilt DIRECT context when available (saves recompute).
+                if app_no in direct_docs:
+                    docs.append(direct_docs[app_no])
+                    continue
                 patent = self.patent_index.get(app_no)
                 if not patent:
                     continue
@@ -634,16 +885,16 @@ class ChatbotEngine:
 
         merge_elapsed = (time.perf_counter() - merge_start) * 1000.0
         total_ms = (time.perf_counter() - start_time) * 1000.0
-
+        print("###################### 최종 검색 결과 ######################")
         self.logger.info(
             f"[RETRIEVAL_DETAIL] ID:{request_id} | "
             f"Match:{match_elapsed:.1f}ms | "
             f"Qdrant:{qdrant_elapsed:.1f}ms | "
             f"Merge:{merge_elapsed:.1f}ms | "
             f"Total:{total_ms:.1f}ms | "
-            f"Mongo_docs={len(mongo_apps)} Qdrant_docs={len(qdrant_apps)} Final={len(docs)}"
+            f"Direct_docs={len(direct_app_nos)} Mongo_docs={len(mongo_apps)} Qdrant_docs={len(qdrant_apps)} Final={len(docs)}"
         )
-
+        print("########################################################")
         return docs, {
             "match_ms": match_elapsed,
             "qdrant_ms": qdrant_elapsed,
@@ -652,55 +903,66 @@ class ChatbotEngine:
 
 
 
-    async def answer(self, query: str, session_id: str | None = None, top_k: int = 50):
-        request_id = uuid.uuid4().hex[:10]
-        full_start = time.perf_counter()
+    async def answer(self, query: str, session_id: str | None = None, top_k: int = 30) -> dict:
+        request_id: str = uuid.uuid4().hex[:10]
+        full_start: float = time.perf_counter()
         current_session_id: str = session_id or uuid.uuid4().hex[:12]
-        
-        # 1. DB 로드
-        init_start = time.perf_counter()
+        init_start: float = time.perf_counter()
         await self.initialize()
-        init_elapsed = (time.perf_counter() - init_start) * 1000.0
-        
-        # 2. Hybrid Retrieval
-        retrieve_start = time.perf_counter()
+        init_elapsed: float = (time.perf_counter() - init_start) * 1000.0
+        retrieve_start: float = time.perf_counter()
         docs_data, retrieve_details = await self.hybrid_retrieve(query, top_k)
-        retrieve_elapsed = (time.perf_counter() - retrieve_start) * 1000.0
-        
+        retrieve_elapsed: float = (time.perf_counter() - retrieve_start) * 1000.0
         if not docs_data:
             answer_text: str = "정보를 찾을 수 없습니다."
             await self.save_message(current_session_id, query, answer_text)
             return {"answer": answer_text, "session_id": current_session_id}
-
         try:
-            # 3. Context Formatting
-            context_start = time.perf_counter()
-            context = "\n".join(
-                [
-                    f"[DOC {i+1} | {app_no}]\n{txt}"
-                    for i, (_src, app_no, txt) in enumerate(docs_data)
-                ]
+            context_start: float = time.perf_counter()
+            context: str = "\n".join(
+                [f"[DOC {i+1} | {app_no}]\n{txt}" for i, (_src, app_no, txt) in enumerate(docs_data)]
             )
-            
-            max_context_chars = int(os.getenv("OPENAI_MAX_CONTEXT_CHARS") or 400000)
+            max_context_chars: int = int(os.getenv("OPENAI_MAX_CONTEXT_CHARS") or 400000)
             if len(context) > max_context_chars:
                 context = context[:max_context_chars] + "\n\n[TRUNCATED]"
-            
-            context_elapsed = (time.perf_counter() - context_start) * 1000.0
-
-            # 4. LLM Generation
-            llm_start = time.perf_counter()
-            resp = self.client_openai.chat.completions.create(
-                model=self.chat_model,
-                messages=[{"role": "user", "content": self.build_prompt(query, context)}],
+            context_elapsed: float = (time.perf_counter() - context_start) * 1000.0
+            llm_start: float = time.perf_counter()
+            llm_timeout_s_raw: str = (os.getenv("OPENAI_CHAT_TIMEOUT_SECONDS") or "").strip()
+            # Default increased to allow long generations without trimming context.
+            llm_timeout_s: float = 240.0
+            try:
+                if llm_timeout_s_raw:
+                    llm_timeout_s = float(llm_timeout_s_raw)
+            except Exception:
+                llm_timeout_s = 240.0
+            if llm_timeout_s <= 0:
+                llm_timeout_s = 240.0
+            self.logger.info(
+                "openai_chat_start ID=%s session_id=%s timeout_s=%.1f model=%s",
+                request_id,
+                current_session_id,
+                llm_timeout_s,
+                self.chat_model,
             )
-            answer_text = resp.choices[0].message.content.strip()
-            llm_elapsed = (time.perf_counter() - llm_start) * 1000.0
-            
-            # 5. Perf Report
-            total_elapsed_ms = (time.perf_counter() - full_start) * 1000.0
-            
-            perf_report = (
+            resp = await asyncio.wait_for(
+                asyncio.to_thread(
+                    self.client_openai.chat.completions.create,
+                    model=self.chat_model,
+                    messages=[{"role": "user", "content": self.build_prompt(query, context)}],
+                ),
+                timeout=llm_timeout_s,
+            )
+            answer_text: str = (resp.choices[0].message.content or "").strip()
+            llm_elapsed: float = (time.perf_counter() - llm_start) * 1000.0
+            self.logger.info(
+                "openai_chat_done ID=%s session_id=%s elapsed_ms=%.1f",
+                request_id,
+                current_session_id,
+                llm_elapsed,
+            )
+            await self.save_message(current_session_id, query, answer_text)
+            total_elapsed_ms: float = (time.perf_counter() - full_start) * 1000.0
+            perf_report: str = (
                 f"\n{'='*65}\n"
                 f" [PERF_REPORT] ID: {request_id} | docs: {len(docs_data)}\n"
                 f"{'-'*65}\n"
@@ -715,29 +977,26 @@ class ChatbotEngine:
                 f" TOTAL ELAPSED     : {total_elapsed_ms:>10.1f} ms ({total_elapsed_ms/1000:.2f}s)\n"
                 f"{'='*65}"
             )
-            
             self.logger.info(perf_report)
             print(perf_report)
-            await self.save_message(current_session_id, query, answer_text)
             return {"answer": answer_text, "session_id": current_session_id}
-
         except asyncio.TimeoutError:
-            llm_timeout_s_raw: str = (os.getenv("OPENAI_CHAT_TIMEOUT_SECONDS") or "").strip()
-            llm_timeout_s: float = 240.0
+            llm_timeout_s_raw2: str = (os.getenv("OPENAI_CHAT_TIMEOUT_SECONDS") or "").strip()
+            llm_timeout_s2: float = 240.0
             try:
-                if llm_timeout_s_raw:
-                    llm_timeout_s = float(llm_timeout_s_raw)
+                if llm_timeout_s_raw2:
+                    llm_timeout_s2 = float(llm_timeout_s_raw2)
             except Exception:
-                llm_timeout_s = 240.0
-            if llm_timeout_s <= 0:
-                llm_timeout_s = 240.0
+                llm_timeout_s2 = 240.0
+            if llm_timeout_s2 <= 0:
+                llm_timeout_s2 = 240.0
             self.logger.warning(
                 "openai_chat_timeout ID=%s session_id=%s timeout_s=%.1f",
                 request_id,
                 current_session_id,
-                llm_timeout_s,
+                llm_timeout_s2,
             )
-            answer_text: str = f"답변 생성 에러: OpenAI timeout after {llm_timeout_s:.0f}s"
+            answer_text: str = f"답변 생성 에러: OpenAI timeout after {llm_timeout_s2:.0f}s"
             await self.save_message(current_session_id, query, answer_text)
             return {"answer": answer_text, "session_id": current_session_id}
         except Exception as e:
@@ -745,8 +1004,6 @@ class ChatbotEngine:
             answer_text: str = f"답변 생성 에러: {e}"
             await self.save_message(current_session_id, query, answer_text)
             return {"answer": answer_text, "session_id": current_session_id}
-
-
 
     async def save_message(self, session_id: str, user_query: str, ai_answer: str) -> None:
         collection = self.db["chat_history"]
@@ -758,6 +1015,7 @@ class ChatbotEngine:
                 "$setOnInsert": {
                     "session_id": session_id,
                     "created_at": now_dt,
+                    # Title should come from the first user prompt only.
                     "title": title,
                 },
                 "$push": {
@@ -770,11 +1028,13 @@ class ChatbotEngine:
                 },
                 "$set": {
                     "updated_at": now_dt,
+                    # Refresh TTL based on latest activity (expire N days after last use)
                     "expires_at": now_dt + timedelta(days=self.chat_history_ttl_days),
                 },
             },
             upsert=True,
         )
+
     async def get_all_session(self, limit: int = 100) -> list[dict]:
         collection = self.db["chat_history"]
         cursor = (
@@ -816,8 +1076,7 @@ class ChatbotEngine:
         except Exception as e:
             self.logger.debug("chatbot_engine_chat_history_index_create_failed err=%r", e)
 
-
-    def build_prompt(self, query: str, context: str) -> str:
+    def build_prompt(self, query: str, context: str):
         return f"""당신은 한양대학교 ERICA 산학협력단이 보유한 특허 데이터베이스(KIPRIS Detail.json)를 잘 이해하고 사용하는 전문 특허 분석가입니다.
 RULES:
 - CONTEXT만을 근거로 하고, 외부 지식이나 새로운 사실은 절대 추가하지 말 것.
@@ -825,7 +1084,7 @@ RULES:
 - 주어진 PATENT의 내용을 기반으로 정확한 정보만을 제공하세요.
 - 주어진 PATENT에 정확한 정보가 없다면 알 수 없다고 답하세요.
 - 질문의 의도를 파악하여 조건에 맞는 내용만 명료하게 답하세요.
-- 질문에 오타나 띄어쓰기 실수가 있다면 정제하여 답하세요.
+- 질문에 오타, 띄어쓰기 오류, 한영변환 오류 등으로 추정되는 것이 있다면 정제하여 답하세요.
 
 [CONTEXT]
 {context}
