@@ -40,6 +40,7 @@ export const useChatViewModel = () => {
     const [draftSessionKey, setDraftSessionKey] = useState<string>(createDraftSessionKey());
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const loadSessionsRequestIdRef = useRef<number>(0);
+    const [status, setStatus] = useState<'loading' | 'success' | 'timeout' | 'error'>('loading');
 
     // --- 초기 데이터 로드 ---
     const loadSessions = useCallback(async () => {
@@ -83,9 +84,18 @@ export const useChatViewModel = () => {
 
     //2.과거 세션 선택 시 내역 불러오기
   const selectSession = async (sessionId: string) => {
+
+    setStatus('loading');
     setIsLoading(true);
     setCurrentSessionId(sessionId);
     currentSessionIdRef.current = sessionId;
+
+
+    // 10초 지났는데 여전히 로딩 중이라면 timeout 상태로 변경
+    const timeoutId = setTimeout(()  => {
+
+      setStatus(prev => prev == 'loading' ? 'timeout' : prev);
+    },10000);
     
     // 먼저 localStorage에서 캐시 확인
     const cachedHistory = loadHistoryFromStorage(sessionId);
@@ -107,9 +117,12 @@ export const useChatViewModel = () => {
         setMessages([]);
       }
     } finally {
+      clearTimeout(timeoutId);
       setIsLoading(false);
     }
   };
+
+
 
   // 3. 메시지 전송
   const sendMessage = async (userInput: string): Promise<string> => {
@@ -219,6 +232,7 @@ export const useChatViewModel = () => {
     sendMessage,
     selectSession,
     createNewChat,
+    status,
     deleteSession,
     refreshSessions: loadSessions
   };

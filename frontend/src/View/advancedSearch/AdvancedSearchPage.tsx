@@ -70,7 +70,7 @@ export default function AdvancedSearchPage() {
         // 메인 폼 필드 (상세 검색 모달에 값이 없을 때만 사용)
         techKw: 'tech_q',
         prodKw: 'prod_q',
-        inventor: 'inventor',
+        inventor: 'manager',  // 책임연구자 → responsibleInventor 필드 검색
       };
 
       // 1. 상세 검색 모달 필드 우선 처리
