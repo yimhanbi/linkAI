@@ -88,6 +88,19 @@ def sync_data(use_cloud=False, clear_index=False):
             if "rawRef" in patent_copy:
                 patent_copy["rawRef"] = str(patent_copy["rawRef"])
             
+            # 책임연구자 필드 추가 (inventors[0].name)
+            inventors = patent_copy.get("inventors", [])
+            if inventors and len(inventors) > 0:
+                first_inventor = inventors[0]
+                if isinstance(first_inventor, dict):
+                    patent_copy["responsibleInventor"] = first_inventor.get("name", "")
+                elif isinstance(first_inventor, str):
+                    patent_copy["responsibleInventor"] = first_inventor
+                else:
+                    patent_copy["responsibleInventor"] = ""
+            else:
+                patent_copy["responsibleInventor"] = ""
+            
             # Elasticsearch bulk action 준비
             es_actions.append({
                 "_index": "patents",

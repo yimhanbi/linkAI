@@ -277,9 +277,9 @@ async def get_patents(
                 logger.debug("inventor_parsed request_id=%s query=%s", request_id, inventor_query)
                 must_queries.append(inventor_query)
         
-        # 책임연구자 검색 (AND/OR 연산자 지원)
+        # 책임연구자 검색 (responsibleInventor 필드 사용 - inventors[0].name)
         if manager:
-            manager_query = _parse_and_or_query("inventors.name", manager)
+            manager_query = _parse_and_or_query("responsibleInventor", manager)
             if manager_query:
                 logger.debug("manager_parsed request_id=%s query=%s", request_id, manager_query)
                 must_queries.append(manager_query)
@@ -329,6 +329,7 @@ async def get_patents(
                 "abstract": {"number_of_fragments": 0},
                 "claims": {"number_of_fragments": 0},
                 "inventors.name": {"number_of_fragments": 0},
+                "responsibleInventor": {"number_of_fragments": 0},  # 책임연구자
                 "applicant.name": {"number_of_fragments": 0}
             }
             # 하이라이팅 쿼리는 검색 쿼리와 동일하게 설정
