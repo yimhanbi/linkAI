@@ -37,6 +37,11 @@ const ChatWelcome: React.FC<Props> = ({ onPickTemplate }) => {
   return (
     <div className="chatbot-welcome" aria-label="Chat welcome">
       <div className="chatbot-welcome-inner">
+        {/* 헤더 배너 */}
+        <div className="chatbot-header-banner">
+          <span className="chatbot-header-subtitle">Hybrid Keyword & Vector Search</span>
+          <h2 className="chatbot-header-title">Engine Alpha (α)</h2>
+        </div>
         <h1 className="chatbot-welcome-title">무엇을 도와드릴까요?</h1>
         <p className="chatbot-welcome-subtitle">
           AI 기반 자연어 처리로 맞춤형 특허분석정보를 제공합니다.

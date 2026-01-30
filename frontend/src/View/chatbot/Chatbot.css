@@ -34,6 +34,51 @@
   border: 1px solid var(--border);
   background: var(--bg);
   position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ==============================
+   Chatbot Header Banner (inside welcome)
+   ============================== */
+.chatbot-header-banner {
+  width: 100%;
+  background: linear-gradient(135deg, #0d47a1 0%, #1565c0 50%, #1976d2 100%);
+  padding: 24px 32px;
+  text-align: center;
+  border-radius: 12px;
+  margin-bottom: 24px;
+}
+
+.chatbot-header-subtitle {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.85);
+  margin-bottom: 8px;
+}
+
+.chatbot-header-title {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 700;
+  color: #ffa726;
+  letter-spacing: 1px;
+}
+
+/* Dark mode adjustments */
+[data-theme="dark"] .chatbot-header-banner {
+  background: linear-gradient(135deg, #0a1929 0%, #102a43 50%, #1a365d 100%);
+}
+
+[data-theme="dark"] .chatbot-header-subtitle {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+[data-theme="dark"] .chatbot-header-title {
+  color: #ffb74d;
 }
 
 /* ==============================
@@ -164,6 +209,17 @@
   overflow-y: auto;
   /* Leave space for the new pill input */
   padding-bottom: 120px;
+}
+
+/* 메시지 내용을 가운데 정렬하는 wrapper */
+.chatbot-window .react-chatbot-kit-chat-bot-message-container,
+.chatbot-window .react-chatbot-kit-user-chat-message-container {
+  max-width: 920px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 20px;
+  padding-right: 20px;
+  box-sizing: border-box;
 }
 
 .chatbot-window .react-chatbot-kit-chat-input-container {
