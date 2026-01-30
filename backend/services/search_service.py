@@ -3,6 +3,7 @@ import json
 import re
 import os
 import asyncio
+import time
 from typing import List,Dict,Tuple,Optional
 from contextlib import asynccontextmanager # 시작과 종료 시점에 특정 작업을 실행하기 위한 도구
 
@@ -19,6 +20,14 @@ QDRANT_URL = os.getenv("QDRANT_URL")
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 COLLECTION_NAME = os.getenv("COLLECTION_NAME", "patents")
 JSON_PATH = os.getenv("JSON_PATH")
+
+# 디버그 성능 로그 on/off (환경변수로 제어)
+DEBUG_PERF = os.getenv("DEBUG_PERF", "false").lower() == "true"
+
+def perf_log(msg: str):
+    """DEBUG_PERF=true일 때만 출력하는 헬퍼 함수"""
+    if DEBUG_PERF:
+        print(msg)
 
 
 
@@ -122,6 +131,7 @@ def extract_application_number(patent):
 #LLM 관련 함수들 
 
 async def extract_weighted_keywords_llm(query: str):
+    start = time.time()
     resp = await client_openai.chat.completions.create(
         model="gpt-5",
         messages=[
@@ -152,8 +162,8 @@ async def extract_weighted_keywords_llm(query: str):
     
     raw = resp.choices[0].message.content.strip()
     
-    print("\n🧠 [RAW LLM OUTPUT]")
-    print(raw)
+    perf_log("\n🧠 [RAW LLM OUTPUT]")
+    perf_log(raw)
     
     weighted_keywords = []
     
@@ -172,6 +182,7 @@ async def extract_weighted_keywords_llm(query: str):
         except ValueError:
             continue  
     
+    perf_log(f"⏱️ [LLM 키워드 추출] {time.time() - start:.2f}초")
     return weighted_keywords
 
 #--------------------------------------
@@ -185,14 +196,20 @@ async def get_query_embedding(text: str):
     return emb.data[0].embedding
 
 async def qdrant_search_app_numbers(query:str,limit: int):
-    vector = await get_query_embedding(query)
+    start = time.time()
     
+    emb_start = time.time()
+    vector = await get_query_embedding(query)
+    perf_log(f"⏱️ [임베딩 생성] {time.time() - emb_start:.2f}초")
+    
+    search_start = time.time()
     results = await client_qdrant.query_points(
         collection_name=COLLECTION_NAME,
         query=vector,
         limit=limit,
         with_payload=True
     )
+    perf_log(f"⏱️ [Qdrant 쿼리] {time.time() - search_start:.2f}초")
     
     apps=[]
     for r in results.points:
@@ -200,7 +217,8 @@ async def qdrant_search_app_numbers(query:str,limit: int):
         app_no = normalize_application_number(raw)
         if app_no:
             apps.append(app_no)
-            
+    
+    perf_log(f"⏱️ [Qdrant 전체] {time.time() - start:.2f}초 → {len(apps)}개")
     return apps
 
 
@@ -209,14 +227,15 @@ async def simple_match_search_app_numbers(query: str, limit: int):
     ✔ LLM이 준 가중치로 키워드 우선순위를 결정
     ✔ 문서 점수는 각 키워드 등장 횟수를 벡터로 만들어 사전식(lexicographic) 비교로 정렬
     """
-    print(f"\n{'='*60}")
-    print(f"🔎 [SIMPLE MATCH SEARCH START]")
-    print(f"   Query: '{query}'")
-    print(f"   Limit: {limit}")
-    print(f"{'='*60}")
+    start = time.time()
+    perf_log(f"\n{'='*60}")
+    perf_log(f"🔎 [SIMPLE MATCH SEARCH START]")
+    perf_log(f"   Query: '{query}'")
+    perf_log(f"   Limit: {limit}")
+    perf_log(f"{'='*60}")
     
     weighted_keywords = await extract_weighted_keywords_llm(query)
-    print(f"\n🔎 [LLM WEIGHTED KEYWORDS] → {weighted_keywords}")
+    perf_log(f"\n🔎 [LLM WEIGHTED KEYWORDS] → {weighted_keywords}")
     
     if not weighted_keywords:
         print("❌ No weighted keywords extracted!")
@@ -224,11 +243,11 @@ async def simple_match_search_app_numbers(query: str, limit: int):
     
     # ✅ 1. 가중치 내림차순 정렬 (중요 키워드 우선)
     weighted_keywords = sorted(weighted_keywords, key=lambda x: x[1], reverse=True)
-    print(f"🔎 [SORTED KEYWORDS] → {weighted_keywords}")
+    perf_log(f"🔎 [SORTED KEYWORDS] → {weighted_keywords}")
     
-    print(f"\n🔍 [DATA CHECK]")
-    print(f"   patent_flattened length: {len(patent_flattened)}")
-    print(f"   patent_flattened type: {type(patent_flattened)}")
+    perf_log(f"\n🔍 [DATA CHECK]")
+    perf_log(f"   patent_flattened length: {len(patent_flattened)}")
+    perf_log(f"   patent_flattened type: {type(patent_flattened)}")
     
     if not patent_flattened:
         print("❌ ERROR: patent_flattened is empty!")
@@ -307,21 +326,26 @@ async def simple_match_search_app_numbers(query: str, limit: int):
     
     result = [app_no for _, app_no in scored[:limit]]
     
-    print(f"\n🎯 [FINAL RESULT]")
-    print(f"   Returning {len(result)} patents (limit={limit})")
-    print(f"   Sample app_nos: {result[:3]}")
-    print(f"{'='*60}\n")
+    perf_log(f"\n🎯 [FINAL RESULT]")
+    perf_log(f"   Returning {len(result)} patents (limit={limit})")
+    perf_log(f"   Sample app_nos: {result[:3]}")
+    perf_log(f"⏱️ [Simple Match 전체] {time.time() - start:.2f}초")
+    perf_log(f"{'='*60}\n")
     
     return result
 
     
 async def hybrid_retrieve(query:str, target_k: int):
+    start = time.time()
     
     #병렬 실행 
+    parallel_start = time.time()
     search_apps,qdrant_apps = await asyncio.gather(
         simple_match_search_app_numbers(query, target_k),
         qdrant_search_app_numbers(query, target_k * 2)
     )
+    
+    perf_log(f"⏱️ [병렬 검색] {time.time() - parallel_start:.2f}초")
     
     s_set = set(search_apps)
     q_set = set(qdrant_apps)
@@ -334,7 +358,7 @@ async def hybrid_retrieve(query:str, target_k: int):
     # qdrant_apps = qdrant_search_app_numbers(query, target_k * 2)
     # q_set = set(qdrant_apps)
     
-    print(
+    perf_log(
         f"\n🔍 [INITIAL RETRIEVAL] → "
         f"search={len(search_apps)}, "
         f"qdrant={len(qdrant_apps)}"
@@ -370,13 +394,14 @@ async def hybrid_retrieve(query:str, target_k: int):
 
     total_docs = len(final_apps)   # 반드시 top_k*2
 
-    print(
+    perf_log(
         f"\n📊 SOURCE STATS → "
         f"overlap={overlap}, "
         f"search_only={search_only}, "
         f"qdrant_only={qdrant_only}, "
         f"total_docs={total_docs}"
     )
+    perf_log(f"⏱️ [Hybrid Retrieve 전체] {time.time() - start:.2f}초")
     # ---------------------------------------------
 
     return docs
@@ -403,12 +428,24 @@ RULES:
 """    
             
     
-async def hybrid_rag_answer(query:str, top_k: int = 50):
+async def hybrid_rag_answer(query:str, top_k: int):
+    overall_start = time.time()
+    perf_log(f"\n{'#'*70}")
+    perf_log(f"🤖 [RAG 답변 생성 시작] Query: '{query[:50]}...'")
+    perf_log(f"{'#'*70}")
+    
+    # 1. 문서 검색
+    retrieve_start = time.time()
     docs = await hybrid_retrieve(query,top_k)
+    retrieve_elapsed = time.time() - retrieve_start
     
     if not docs:
         return "정보가 부족합니다."
     
+    perf_log(f"⏱️ [1단계: 문서 검색] {retrieve_elapsed:.2f}초 → {len(docs)}개 문서")
+    
+    # 2. 컨텍스트 생성
+    context_start = time.time()
     context = ""
     for i, (source, app_no, text) in enumerate(docs):
         context += f"""
@@ -418,16 +455,33 @@ APPLICATION_NUMBER: {app_no}
 =============================================================================\n
 {text}
 """
+    context_elapsed = time.time() - context_start
+    perf_log(f"⏱️ [2단계: 컨텍스트 생성] {context_elapsed:.2f}초 → {len(context):,}자")
 
     prompt = build_prompt(query, context)
 
+    # 3. LLM 답변 생성
+    llm_start = time.time()
     resp = await client_openai.chat.completions.create(
         model="gpt-5",
         messages=[{"role": "user", "content": prompt}],
         #temperature=0.2
     )
+    llm_elapsed = time.time() - llm_start
+    
+    answer = resp.choices[0].message.content.strip()
+    overall_elapsed = time.time() - overall_start
+    
+    # 최종 요약
+    perf_log(f"⏱️ [3단계: LLM 답변 생성] {llm_elapsed:.2f}초 → {len(answer)}자")
+    perf_log(f"\n{'='*70}")
+    perf_log(f"✅ [전체 완료] {overall_elapsed:.2f}초")
+    perf_log(f"   1. 문서 검색:      {retrieve_elapsed:6.2f}초 ({retrieve_elapsed/overall_elapsed*100:5.1f}%)")
+    perf_log(f"   2. 컨텍스트 생성:  {context_elapsed:6.2f}초 ({context_elapsed/overall_elapsed*100:5.1f}%)")
+    perf_log(f"   3. LLM 답변:       {llm_elapsed:6.2f}초 ({llm_elapsed/overall_elapsed*100:5.1f}%)")
+    perf_log(f"{'='*70}\n")
 
-    return resp.choices[0].message.content.strip()
+    return answer
 
 #--------------------------------------
 #데이터 초기화 함수
@@ -445,13 +499,13 @@ async def initialize_data():
         patents = json.load(f)
     print(f"▶ 특허 데이터 로드 완료: {len(patents)}개")
     
-    # 🔍 첫 번째 특허 구조 확인
-    if patents:
-        print("\n🔍 [FIRST PATENT STRUCTURE]")
-        first_patent = patents[0]
-        print(f"   Type: {type(first_patent)}")
-        print(f"   Keys: {list(first_patent.keys()) if isinstance(first_patent, dict) else 'Not a dict'}")
-        print(f"   JSON preview: {json.dumps(first_patent, ensure_ascii=False, indent=2)[:500]}...")
+    # 🔍 첫 번째 특허 구조 확인 
+    # if patents:
+    #     perf_log("\n🔍 [FIRST PATENT STRUCTURE]")
+    #     first_patent = patents[0]
+    #     perf_log(f"   Type: {type(first_patent)}")
+    #     perf_log(f"   Keys: {list(first_patent.keys()) if isinstance(first_patent, dict) else 'Not a dict'}")
+    #     perf_log(f"   JSON preview: {json.dumps(first_patent, ensure_ascii=False, indent=2)[:500]}...")
 
     print("\n▶ Building indexes...")
     for p in patents:
@@ -462,34 +516,34 @@ async def initialize_data():
 
     print(f"▶ applicationNumber index 생성 완료: {len(patent_index)}개")
 
-    # 🔍 첫 3개 특허에서 상세 디버깅
-    for i, patent in enumerate(patents[:3]):
-        app_no = normalize_application_number(extract_application_number(patent))
-        if not app_no:
-            continue
-        
-        print(f"\n🔍 [PATENT {i+1}] app_no: {app_no}")
-        
-        # 각 필드가 찾아지는지 확인
-        title = find_key_recursive(patent, "inventionTitle")
-        abstract = find_key_recursive(patent, "astrtCont")
-        claims = find_key_recursive(patent, "claim")
-        inventors = find_key_recursive(patent, "name")
-        
-        print(f"   inventionTitle found: {len(title)} items → {title[:1] if title else 'NONE'}")
-        print(f"   astrtCont found: {len(abstract)} items → {abstract[:1] if abstract else 'NONE'}")
-        print(f"   claim found: {len(claims)} items")
-        print(f"   name found: {len(inventors)} items → {inventors[:3] if inventors else 'NONE'}")
-        
-        cleaned_text = build_patent_context_ko(patent)
-        print(f"   Final text length: {len(cleaned_text)}")
-        print(f"   Text preview: {cleaned_text[:200]}...")
-        
-        patent_text_index[app_no] = cleaned_text
-        patent_flattened.append({"app_no": app_no, "text": cleaned_text})
+    # 🔍 첫 3개 특허에서 상세 디버깅 (주석 처리)
+    # for i, patent in enumerate(patents[:3]):
+    #     app_no = normalize_application_number(extract_application_number(patent))
+    #     if not app_no:
+    #         continue
+    #     
+    #     perf_log(f"\n🔍 [PATENT {i+1}] app_no: {app_no}")
+    #     
+    #     # 각 필드가 찾아지는지 확인
+    #     title = find_key_recursive(patent, "inventionTitle")
+    #     abstract = find_key_recursive(patent, "astrtCont")
+    #     claims = find_key_recursive(patent, "claim")
+    #     inventors = find_key_recursive(patent, "name")
+    #     
+    #     perf_log(f"   inventionTitle found: {len(title)} items → {title[:1] if title else 'NONE'}")
+    #     perf_log(f"   astrtCont found: {len(abstract)} items → {abstract[:1] if abstract else 'NONE'}")
+    #     perf_log(f"   claim found: {len(claims)} items")
+    #     perf_log(f"   name found: {len(inventors)} items → {inventors[:3] if inventors else 'NONE'}")
+    #     
+    #     cleaned_text = build_patent_context_ko(patent)
+    #     perf_log(f"   Final text length: {len(cleaned_text)}")
+    #     perf_log(f"   Text preview: {cleaned_text[:200]}...")
+    #     
+    #     patent_text_index[app_no] = cleaned_text
+    #     patent_flattened.append({"app_no": app_no, "text": cleaned_text})
 
-    # 나머지 특허 처리
-    for patent in patents[3:]:
+    # 모든 특허 처리
+    for patent in patents:
         app_no = normalize_application_number(extract_application_number(patent))
         if not app_no:
             continue
