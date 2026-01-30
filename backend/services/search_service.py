@@ -2,13 +2,15 @@
 import json
 import re
 import os
+import asyncio
 from typing import List,Dict,Tuple,Optional
 from contextlib import asynccontextmanager # 시작과 종료 시점에 특정 작업을 실행하기 위한 도구
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel # 데이터 검증 및 데이터 변환 
-from openai import OpenAI
-from qdrant_client import QdrantClient
+from openai import AsyncOpenAI
+from qdrant_client import AsyncQdrantClient
+
 
 #--------------------------------------
 # 환경 변수 설정 
@@ -22,8 +24,8 @@ JSON_PATH = os.getenv("JSON_PATH")
 
 #--------------------------------------
 # 전역 변수 (시작시 초기화)
-client_openai : Optional[OpenAI] = None
-client_qdrant : Optional[QdrantClient] = None
+client_openai: Optional[AsyncOpenAI] = None
+client_qdrant : Optional[AsyncQdrantClient] = None
 
 #타입 힌트 
 patents: List[Dict] = []
@@ -119,8 +121,8 @@ def extract_application_number(patent):
 #--------------------------------------
 #LLM 관련 함수들 
 
-def extract_weighted_keywords_llm(query: str):
-    resp = client_openai.chat.completions.create(
+async def extract_weighted_keywords_llm(query: str):
+    resp = await client_openai.chat.completions.create(
         model="gpt-5",
         messages=[
             {
@@ -175,17 +177,17 @@ def extract_weighted_keywords_llm(query: str):
 #--------------------------------------
 #검색 관련 함수들
 
-def get_query_embedding(text: str):
-    emb = client_openai.embeddings.create(
+async def get_query_embedding(text: str):
+    emb = await client_openai.embeddings.create(
         model="text-embedding-3-large",
         input = text
     )
     return emb.data[0].embedding
 
-def qdrant_search_app_numbers(query:str,limit: int):
-    vector = get_query_embedding(query)
+async def qdrant_search_app_numbers(query:str,limit: int):
+    vector = await get_query_embedding(query)
     
-    results = client_qdrant.query_points(
+    results = await client_qdrant.query_points(
         collection_name=COLLECTION_NAME,
         query=vector,
         limit=limit,
@@ -202,7 +204,7 @@ def qdrant_search_app_numbers(query:str,limit: int):
     return apps
 
 
-def simple_match_search_app_numbers(query: str, limit: int):
+async def simple_match_search_app_numbers(query: str, limit: int):
     """
     ✔ LLM이 준 가중치로 키워드 우선순위를 결정
     ✔ 문서 점수는 각 키워드 등장 횟수를 벡터로 만들어 사전식(lexicographic) 비교로 정렬
@@ -213,7 +215,7 @@ def simple_match_search_app_numbers(query: str, limit: int):
     print(f"   Limit: {limit}")
     print(f"{'='*60}")
     
-    weighted_keywords = extract_weighted_keywords_llm(query)
+    weighted_keywords = await extract_weighted_keywords_llm(query)
     print(f"\n🔎 [LLM WEIGHTED KEYWORDS] → {weighted_keywords}")
     
     if not weighted_keywords:
@@ -313,14 +315,24 @@ def simple_match_search_app_numbers(query: str, limit: int):
     return result
 
     
-def hybrid_retrieve(query:str, target_k: int):
-    #1) search는 최대 target_k
-    search_apps = simple_match_search_app_numbers(query, target_k)
-    s_set = set(search_apps)
+async def hybrid_retrieve(query:str, target_k: int):
     
-    #2) qdrant는 항상 target_k*2 개 가져와서 search 부족분을 확실히 보완
-    qdrant_apps = qdrant_search_app_numbers(query, target_k * 2)
+    #병렬 실행 
+    search_apps,qdrant_apps = await asyncio.gather(
+        simple_match_search_app_numbers(query, target_k),
+        qdrant_search_app_numbers(query, target_k * 2)
+    )
+    
+    s_set = set(search_apps)
     q_set = set(qdrant_apps)
+    
+    # #1) search는 최대 target_k
+    # search_apps = simple_match_search_app_numbers(query, target_k)
+    # s_set = set(search_apps)
+    
+    # #2) qdrant는 항상 target_k*2 개 가져와서 search 부족분을 확실히 보완
+    # qdrant_apps = qdrant_search_app_numbers(query, target_k * 2)
+    # q_set = set(qdrant_apps)
     
     print(
         f"\n🔍 [INITIAL RETRIEVAL] → "
@@ -391,8 +403,8 @@ RULES:
 """    
             
     
-def hybrid_rag_answer(query:str, top_k: int = 50):
-    docs = hybrid_retrieve(query,top_k)
+async def hybrid_rag_answer(query:str, top_k: int = 50):
+    docs = await hybrid_retrieve(query,top_k)
     
     if not docs:
         return "정보가 부족합니다."
@@ -409,7 +421,7 @@ APPLICATION_NUMBER: {app_no}
 
     prompt = build_prompt(query, context)
 
-    resp = client_openai.chat.completions.create(
+    resp = await client_openai.chat.completions.create(
         model="gpt-5",
         messages=[{"role": "user", "content": prompt}],
         #temperature=0.2
@@ -417,18 +429,15 @@ APPLICATION_NUMBER: {app_no}
 
     return resp.choices[0].message.content.strip()
 
-
-
-
 #--------------------------------------
 #데이터 초기화 함수
 
-def initialize_data():
+async def initialize_data():
     global client_openai, client_qdrant, patents, patent_index, patent_text_index, patent_flattened
     
     print("▶ Initializing clients...")
-    client_openai = OpenAI(api_key=OPENAI_API_KEY)
-    client_qdrant = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
+    client_openai = AsyncOpenAI(api_key=OPENAI_API_KEY) 
+    client_qdrant = AsyncQdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
     print("▶ Qdrant Connected")
 
     print("▶ Loading patent data...")

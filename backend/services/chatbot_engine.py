@@ -4,20 +4,18 @@ import time
 import os
 import logging
 from motor.motor_asyncio import AsyncIOMotorClient
-
-# search_service에서 필요한 것만 import 
-from .search_service import hybrid_rag_answer, initialize_data
+from backend.services import search_service
 
 
 class ChatbotEngine:
     """특허 검색 챗봇 엔진 - 세션 관리만"""
     
     def __init__(self):
-        initialize_data()  # search_service의 함수 호출
+        # initialize_data()  # search_service의 함수 호출
         
         # MongoDB 설정
-        self.mongo_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
-        self.db_name = os.getenv("MONGODB_DATABASE", "linkai")
+        self.mongo_uri = os.getenv("MONGO_URI")
+        self.db_name = os.getenv("DB_NAME")
         self.chat_history_ttl_days = int(os.getenv("CHAT_HISTORY_TTL_DAYS", "30"))
         
         # MongoDB 클라이언트
@@ -47,7 +45,7 @@ class ChatbotEngine:
             session_id = str(uuid.uuid4())
             
         # RAG 답변 생성
-        answer = hybrid_rag_answer(query)
+        answer = await search_service.hybrid_rag_answer(query, top_k=50)
         
         # MongoDB에 저장
         await self.save_message(session_id, query, answer)

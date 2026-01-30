@@ -6,6 +6,7 @@ from pathlib import Path
 import logging
 from backend.database import db_manager
 from backend.routes import patents, auth, chatbot 
+from backend.services import search_service
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
@@ -69,20 +70,37 @@ else:
 @app.on_event("startup")
 async def startup():
     db_manager.connect()
-    # 챗봇 엔진 초기화는 지연 로드 (네트워크 문제 시 서버 시작 방지)
-    # 첫 요청 시 자동으로 초기화됨
+    
+    #챗봇 검색 서비스 초기화
+    try:
+        await search_service.initialize_data()
+        print("챗봇 검색 서비스 초기화 완료")
+    except Exception as e:
+        print("챗봇 검색 서비스 초기화 실패:{e}")
+        #서버는 시작하되 챗봇 기능만 비활성화
+        
     print("모든 서비스가 준비되었습니다.")
-
+    
+    
+    
 @app.on_event("shutdown")
 async def shutdown():
     db_manager.close()
+    
+    
+    #비동기 클라이언트 정리
+    try:
+        if search_service.client_openai_async:
+            await search_service.client_openai_async.close()
+        if search_service.client_qdrant_async:
+            await search_service.client_qdrant_async.close()
+        print("챗봇 검색 서비스 종료 완료")
+    except Exception as e:
+        print(f"챗봇 검색 서비스 종료 중 오류 발생!: {e}")
 
 # 라우터 연결
 app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
 app.include_router(patents.router, prefix="/api/patents", tags=["Patents"])
-
-
-#챗봇 추가 
 app.include_router(chatbot.router, prefix="/api/chatbot", tags=["Chatbot"])
 
 @app.get("/")
