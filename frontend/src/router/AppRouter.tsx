@@ -34,13 +34,13 @@ export default function AppRouter() {
       {/* 기본 접속(/) 시: 로그인 여부에 따라 리다이렉트 */}
       <Route 
         path="/" 
-        element={isLoggedIn ? <Navigate to="/advanced-search" replace /> : <Navigate to="/login" replace />} 
+        element={isLoggedIn ? <Navigate to="/chatbot" replace /> : <Navigate to="/login" replace />} 
       />
 
       {/* 로그인 페이지: 레이아웃 없이 단독으로 보여야 함 */}
       <Route 
         path="/login" 
-        element={isLoggedIn ? <Navigate to="/advanced-search" replace /> : <LoginPage />} 
+        element={isLoggedIn ? <Navigate to="/chatbot" replace /> : <LoginPage />} 
       />
 
       {/* 메인 서비스 영역: 로그인한 경우에만 접근 가능 (MainLayout 적용) */}
