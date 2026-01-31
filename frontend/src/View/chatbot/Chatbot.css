@@ -207,6 +207,7 @@
   flex: 1 1 auto;
   height: auto !important;
   overflow-y: auto;
+  scroll-behavior: smooth; /* 스크롤이 부드럽게 이동 */
   /* Leave space for the new pill input */
   padding-bottom: 120px;
 }

@@ -9,7 +9,7 @@ import ChatSidebar from './ChatSidebar';
 import ChatWelcome from './ChatWelcome';
 import { useChatbotStore } from '@/ViewModel/useChatbotVM';
 import { type Message, useChatViewModel } from '@/ViewModel/chatbot/ChatViewModel';
-import { useEffect, useLayoutEffect } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 
 const ChatbotContainer = () => {
@@ -56,6 +56,42 @@ const ChatbotContainer = () => {
       window.clearTimeout(timerId);
     };
   }, [isOpen, currentSessionKey]);
+
+
+  //---------스크롤 제어 로직 추가
+  const isUserScrollingRef = useRef(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    
+    const messageContainer = document.querySelector(".react-chatbot-kit-chat-message-container");
+    if (!messageContainer) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = messageContainer;
+
+      // 사용자가 바닥에서 50px 이상 위로 올렸는지 확인
+      const isAtBottom = scrollHeight - scrollTop <= clientHeight + 50;
+
+      // 사용자가 바닥에 있지 않다면 '수동 스크롤 중'으로 간주
+      isUserScrollingRef.current = !isAtBottom;
+    };
+
+    // MutationObserver: 메시지가 추가되어 DOM이 변경되는지 감시
+    const observer = new MutationObserver(() => {
+      if (!isUserScrollingRef.current) {
+        messageContainer.scrollTop = messageContainer.scrollHeight;
+      }
+    });
+
+    messageContainer.addEventListener("scroll", handleScroll);
+    observer.observe(messageContainer, { childList: true, subtree: true });
+
+    return () => {
+      messageContainer.removeEventListener("scroll", handleScroll);
+      observer.disconnect();
+    };
+  }, [isOpen, currentSessionKey]); // 창이 열리거나 세션이 바뀔 때만 재바인딩
 
   const handlePickTemplate = (template: string): void => {
     const inputEl: HTMLInputElement | null = document.querySelector(".react-chatbot-kit-chat-input");
