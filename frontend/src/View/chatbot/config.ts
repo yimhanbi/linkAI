@@ -1,6 +1,7 @@
 import React from "react";
 import { createChatBotMessage } from "react-chatbot-kit";
 import ProgressMessage from "./ProgressMessage";
+import ResponseStatusMessage from "./ResponseStatusMessage";
 
 
 //챗봇의 브랜드 컬러
@@ -34,6 +35,7 @@ const config = {
     // 커스텀 메시지(스켈레톤/상태 표시 등)
     customMessages: {
         progress: (props: unknown) => React.createElement(ProgressMessage, props as object),
+        status: (props: unknown) => React.createElement(ResponseStatusMessage, props as object),
     },
 
     //대화창 내부의 상태값 초기화

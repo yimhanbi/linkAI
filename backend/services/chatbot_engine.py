@@ -45,7 +45,7 @@ class ChatbotEngine:
             session_id = str(uuid.uuid4())
             
         # RAG 답변 생성
-        answer = await search_service.hybrid_rag_answer(query, top_k=50)
+        answer = await search_service.hybrid_rag_answer(query, top_k=10)
         
         # MongoDB에 저장
         await self.save_message(session_id, query, answer)

@@ -55,6 +55,7 @@ class ActionProvider {
       this.removeMessage(progressMessageId);
       const botMessage: ChatMessage = this.createChatBotMessage(response);
       this.updateChatbotState(botMessage);
+      this.addCompletionStatusMessage();
     } catch (error) {
       this.clearIntervals();
       this.removeMessage(progressMessageId);
@@ -132,6 +133,16 @@ class ActionProvider {
       payload: { text },
     };
     this.updateChatbotState(progressMessage);
+  };
+
+  private addCompletionStatusMessage = (): void => {
+    const statusMessage: ChatMessage = {
+      id: this.createUniqueId(),
+      type: "status",
+      message: "",
+      payload: { text: "응답 완료" },
+    };
+    this.updateChatbotState(statusMessage);
   };
 
   private startProgressTicker = (messageId: number): void => {

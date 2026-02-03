@@ -60,38 +60,80 @@ const ChatbotContainer = () => {
 
   //---------스크롤 제어 로직 추가
   const isUserScrollingRef = useRef(false);
+  const lastScrollTopRef = useRef<number | null>(null);
+  const lockIntervalRef = useRef<number | null>(null);
 
+  // 1) 사용자 스크롤 방향 감지 (위로 올리면 자동 스크롤 잠금)
   useEffect(() => {
     if (!isOpen) return;
-    
-    const messageContainer = document.querySelector(".react-chatbot-kit-chat-message-container");
+
+    const messageContainer = document.querySelector<HTMLDivElement>(
+      ".react-chatbot-kit-chat-message-container"
+    );
     if (!messageContainer) return;
 
     const handleScroll = () => {
       const { scrollTop, scrollHeight, clientHeight } = messageContainer;
-
-      // 사용자가 바닥에서 50px 이상 위로 올렸는지 확인
-      const isAtBottom = scrollHeight - scrollTop <= clientHeight + 50;
-
-      // 사용자가 바닥에 있지 않다면 '수동 스크롤 중'으로 간주
+      const isAtBottom = scrollHeight - (scrollTop + clientHeight) <= 50;
+      // 항상 마지막 스크롤 위치 저장
+      lastScrollTopRef.current = scrollTop;
+      // 바닥 기준으로만 자동 스크롤 on/off 결정
       isUserScrollingRef.current = !isAtBottom;
+
+      // 사용자가 위로 올리기 시작하면, 라이브러리의 자동 스크롤을 계속 되돌리는 잠금 루프 시작
+      if (isUserScrollingRef.current && lockIntervalRef.current === null) {
+        lockIntervalRef.current = window.setInterval(() => {
+          const container = document.querySelector<HTMLDivElement>(
+            ".react-chatbot-kit-chat-message-container"
+          );
+          if (!container) return;
+
+          // 더 이상 위쪽을 보고 있지 않으면 잠금 해제
+          if (!isUserScrollingRef.current || lastScrollTopRef.current === null) {
+            if (lockIntervalRef.current !== null) {
+              window.clearInterval(lockIntervalRef.current);
+              lockIntervalRef.current = null;
+            }
+            return;
+          }
+
+          // 라이브러리가 아래로 끌어내려도, 우리가 다시 사용자가 보던 위치로 되돌림
+          container.scrollTop = lastScrollTopRef.current;
+        }, 50);
+      }
     };
 
-    // MutationObserver: 메시지가 추가되어 DOM이 변경되는지 감시
-    const observer = new MutationObserver(() => {
-      if (!isUserScrollingRef.current) {
-        messageContainer.scrollTop = messageContainer.scrollHeight;
-      }
-    });
-
     messageContainer.addEventListener("scroll", handleScroll);
-    observer.observe(messageContainer, { childList: true, subtree: true });
+    // 초기 상태 한 번 계산
+    handleScroll();
 
     return () => {
       messageContainer.removeEventListener("scroll", handleScroll);
-      observer.disconnect();
+      if (lockIntervalRef.current !== null) {
+        window.clearInterval(lockIntervalRef.current);
+        lockIntervalRef.current = null;
+      }
     };
-  }, [isOpen, currentSessionKey]); // 창이 열리거나 세션이 바뀔 때만 재바인딩
+  }, [isOpen, currentSessionKey]); // 세션 바뀌거나 창이 열릴 때만 리스너 부착
+
+  // 2) 새 메시지가 추가될 때만, 사용자가 바닥 근처에 있을 경우에만 자동 스크롤
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const messageContainer = document.querySelector<HTMLDivElement>(
+      ".react-chatbot-kit-chat-message-container"
+    );
+    if (!messageContainer) return;
+
+    // 사용자가 위에서 과거 대화를 보는 중이면, 라이브러리의 자동 스크롤을 즉시 되돌린다.
+    if (isUserScrollingRef.current && lastScrollTopRef.current !== null) {
+      messageContainer.scrollTop = lastScrollTopRef.current;
+      return;
+    }
+
+    // 그렇지 않으면(바닥 근처라면) 새 메시지에 맞춰 맨 아래로 스크롤
+    messageContainer.scrollTop = messageContainer.scrollHeight;
+  }, [messages, isOpen]);
 
   const handlePickTemplate = (template: string): void => {
     const inputEl: HTMLInputElement | null = document.querySelector(".react-chatbot-kit-chat-input");

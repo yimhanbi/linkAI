@@ -298,21 +298,51 @@
   width: 44px;
   height: 44px;
   border-radius: 9999px;
-  background-color: var(--primary);
+  /* 기본은 비활성(연한 회색) 상태 */
+  background-color: color-mix(in srgb, var(--border) 70%, var(--bg) 30%);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 0;
   border: none;
-  cursor: pointer;
-  transition: background-color 0.15s ease, transform 0.05s ease;
+  cursor: default;
+  transition: background-color 0.15s ease, transform 0.05s ease, color 0.15s ease;
 }
 
-.chatbot-window .react-chatbot-kit-chat-btn-send:hover {
+/* 입력폼에 텍스트가 있을 때만 활성화 (파란색) */
+.chatbot-window .react-chatbot-kit-chat-input-form:has(
+  .react-chatbot-kit-chat-input:not(:placeholder-shown)
+) .react-chatbot-kit-chat-btn-send,
+.chatbot-window
+  .react-chatbot-kit-chat-input-container:not(:has(.react-chatbot-kit-chat-input-form)):has(
+    .react-chatbot-kit-chat-input:not(:placeholder-shown)
+  )
+  .react-chatbot-kit-chat-btn-send {
+  background-color: var(--primary);
+  cursor: pointer;
+}
+
+.chatbot-window .react-chatbot-kit-chat-input-form:has(
+    .react-chatbot-kit-chat-input:not(:placeholder-shown)
+  )
+  .react-chatbot-kit-chat-btn-send:hover,
+.chatbot-window
+  .react-chatbot-kit-chat-input-container:not(:has(.react-chatbot-kit-chat-input-form)):has(
+    .react-chatbot-kit-chat-input:not(:placeholder-shown)
+  )
+  .react-chatbot-kit-chat-btn-send:hover {
   background-color: var(--primary-hover);
 }
 
-.chatbot-window .react-chatbot-kit-chat-btn-send:active {
+.chatbot-window .react-chatbot-kit-chat-input-form:has(
+    .react-chatbot-kit-chat-input:not(:placeholder-shown)
+  )
+  .react-chatbot-kit-chat-btn-send:active,
+.chatbot-window
+  .react-chatbot-kit-chat-input-container:not(:has(.react-chatbot-kit-chat-input-form)):has(
+    .react-chatbot-kit-chat-input:not(:placeholder-shown)
+  )
+  .react-chatbot-kit-chat-btn-send:active {
   transform: translateY(1px);
 }
 
@@ -388,7 +418,10 @@
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  margin: 12px 0;
+  margin: 12px auto; /* 가운데 정렬 */
+  max-width: 920px;
+  padding: 0 20px;
+  box-sizing: border-box;
 }
 
 .chatbot-window .linkai-progress-avatar {
@@ -420,6 +453,24 @@
   font-size: 12px;
   color: var(--text-sub);
   white-space: pre-wrap;
+}
+
+/* 응답 완료 상태 메시지 */
+.chatbot-window .linkai-status-message {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px auto 0;
+  max-width: 920px;
+  padding: 0 20px;
+  box-sizing: border-box;
+  font-size: 12px;
+  color: var(--text-sub);
+}
+
+.chatbot-window .linkai-status-check {
+  font-size: 12px;
+  color: var(--primary);
 }
 
 .chatbot-window .linkai-progress-skeleton {
