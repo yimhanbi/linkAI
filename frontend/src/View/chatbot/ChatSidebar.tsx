@@ -78,12 +78,14 @@ const ChatSidebar: React.FC<Props> = ({
         {safeSessions.length === 0 ? (
           <div className="empty-state">No sessions</div>
         ) : (
-          safeSessions.map((s) => (
+          safeSessions.map((s) => {
+            const isActive: boolean = s.session_id === activeId;
+            return (
             <div
               key={s.session_id}
               role="button"
               tabIndex={0}
-              className={`session-item ${s.session_id === activeId ? "active" : ""}`}
+              className={`session-item ${isActive ? "active" : ""}`}
               onClick={() => void handleSelect?.(s.session_id)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
@@ -92,17 +94,36 @@ const ChatSidebar: React.FC<Props> = ({
                 }
               }}
             >
-              <span className="session-icon">
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                </svg>
+              <span className="session-icon" aria-hidden="true">
+                {isActive ? (
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.7"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    {/* 말풍선 테두리 */}
+                    <path d="M5 6.5C5 5.12 6.12 4 7.5 4h9c1.38 0 2.5 1.12 2.5 2.5v6c0 1.38-1.12 2.5-2.5 2.5H10l-2.5 3-0.5-3H7.5C6.12 15 5 13.88 5 12.5z" />
+                    {/* 내용 텍스트 라인 두 줄 */}
+                    <line x1="8.5" y1="8.5" x2="15.5" y2="8.5" />
+                    <line x1="8.5" y1="11" x2="13.5" y2="11" />
+                  </svg>
+                ) : (
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                  </svg>
+                )}
               </span>
               <span className="session-text">{s.title ?? "새로운 대화"}</span>
               {handleDelete ? (
@@ -137,7 +158,7 @@ const ChatSidebar: React.FC<Props> = ({
                 </button>
               ) : null}
             </div>
-          ))
+          )})
         )}
       </div>
     </aside>

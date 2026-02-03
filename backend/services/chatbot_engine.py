@@ -31,7 +31,7 @@ class ChatbotEngine:
     async def _ensure_indexes_once(self):
         """인덱스를 한 번만 생성"""
         if not self._indexes_ensured:
-            await self._ensure_chat_history_indexes()
+        await self._ensure_chat_history_indexes()
             self._indexes_ensured = True
     
     async def answer(self, query: str, session_id: Optional[str] = None) -> dict:
@@ -72,8 +72,8 @@ class ChatbotEngine:
                 "$push": {
                     "messages": {
                         "$each": [
-                            {"role": "user", "content": user_query, "timestamp": time.time()},
-                            {"role": "assistant", "content": ai_answer, "timestamp": time.time()},
+                        {"role": "user", "content": user_query, "timestamp": time.time()},
+                        {"role": "assistant", "content": ai_answer, "timestamp": time.time()},
                         ]
                     }
                 },
@@ -145,7 +145,7 @@ class ChatbotEngine:
             self.logger.info("✅ MongoDB indexes created successfully")
         except Exception as e:
             self.logger.debug("chatbot_engine_chat_history_index_create_failed err=%r", e)
-            
+
         
     # async def answer_stream(self, query: str, session_id: Optional[str] = None):
     #     """실시간 답변 생성(Streaming) 및 완료 후 MongoDB 저장"""
