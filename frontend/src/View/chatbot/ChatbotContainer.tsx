@@ -7,6 +7,7 @@ import MessageParser from './MessageParser';
 import ActionProvider from './ActionProvider';
 import ChatSidebar from './ChatSidebar';
 import ChatWelcome from './ChatWelcome';
+import PatentModalProvider from './patent_modal_context';
 import { useChatbotStore } from '@/ViewModel/useChatbotVM';
 import { type Message, useChatViewModel } from '@/ViewModel/chatbot/ChatViewModel';
 import { useEffect, useLayoutEffect, useRef } from 'react';
@@ -165,28 +166,30 @@ const ChatbotContainer = () => {
       {/* 오른쪽: 채팅창 영역 */}
       <div className="chatbot-window flex-1">
         {shouldShowWelcome ? <ChatWelcome onPickTemplate={handlePickTemplate} /> : null}
-        <Chatbot
-          // [핵심] key를 설정해야 세션 전환 및 '새 채팅' 클릭 시 UI가 초기화됩니다.
-          key={currentSessionKey}
-          config={{
-            ...config,
-            state: {
-              ...(config.state ?? {}),
-              // Make react-chatbot-kit send messages via session-aware ViewModel
-              getBotResponse: sendMessage,
-            },
-            // 과거 내역이 있다면 라이브러리 형식에 맞춰 주입합니다.
-            initialMessages: messages.length > 0 
-              ? messages.map((m: Message, idx: number) => ({
-                  id: idx,
-                  message: m.content,
-                  type: m.role === 'assistant' ? 'bot' : 'user'
-                }))
-              : []
-          }}
-          messageParser={MessageParser}
-          actionProvider={ActionProvider}
-        />
+        <PatentModalProvider>
+          <Chatbot
+            // [핵심] key를 설정해야 세션 전환 및 '새 채팅' 클릭 시 UI가 초기화됩니다.
+            key={currentSessionKey}
+            config={{
+              ...config,
+              state: {
+                ...(config.state ?? {}),
+                // Make react-chatbot-kit send messages via session-aware ViewModel
+                getBotResponse: sendMessage,
+              },
+              // 과거 내역이 있다면 라이브러리 형식에 맞춰 주입합니다.
+              initialMessages: messages.length > 0 
+                ? messages.map((m: Message, idx: number) => ({
+                    id: idx,
+                    message: m.content,
+                    type: m.role === 'assistant' ? 'bot' : 'user'
+                  }))
+                : []
+            }}
+            messageParser={MessageParser}
+            actionProvider={ActionProvider}
+          />
+        </PatentModalProvider>
       </div>
     </div>
   );

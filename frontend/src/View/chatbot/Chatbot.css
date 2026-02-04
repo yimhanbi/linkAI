@@ -386,6 +386,23 @@
   background-color: var(--primary);
 }
 
+/* 특허번호 링크 스타일 (bot 메시지 내부) */
+.chatbot-window .linkai-patent-link {
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.chatbot-window .linkai-patent-link:hover {
+  opacity: 0.9;
+}
+
 /* ---- Message alignment overrides ----
    react-chatbot-kit 기본 CSS에서 봇 말풍선(.react-chatbot-kit-chat-bot-message)에
    margin-left: auto 가 설정되어 있어 봇 답변이 오른쪽으로 밀릴 수 있습니다.
@@ -528,7 +545,7 @@
 .chatbot-window .react-chatbot-kit-user-chat-message {
   width: auto !important; /* override library fixed width (bot bubble) */
   max-width: min(72%, 640px);
-  line-height: 1.4;
+  line-height: 1.6; /* 줄 간격을 조금 더 넉넉하게 */
   white-space: pre-wrap; /* keep \n from backend + wrap normal text */
   overflow-wrap: anywhere; /* break long URLs/ids */
   word-break: break-word;

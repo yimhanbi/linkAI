@@ -2,6 +2,7 @@ import React from "react";
 import { createChatBotMessage } from "react-chatbot-kit";
 import ProgressMessage from "./ProgressMessage";
 import ResponseStatusMessage from "./ResponseStatusMessage";
+import LinkifiedBotChatMessage from "./LinkifiedBotChatMessage";
 
 
 //챗봇의 브랜드 컬러
@@ -30,7 +31,9 @@ const config = {
     },
 
     // 챗봇 상단 헤더 등 커스텀 컴포넌트 설정 가능
-    customComponents:{},
+    customComponents:{
+        botChatMessage: (props: unknown) => React.createElement(LinkifiedBotChatMessage, props as object),
+    },
 
     // 커스텀 메시지(스켈레톤/상태 표시 등)
     customMessages: {
