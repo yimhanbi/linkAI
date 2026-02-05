@@ -31,7 +31,7 @@ class ChatbotEngine:
     async def _ensure_indexes_once(self):
         """인덱스를 한 번만 생성"""
         if not self._indexes_ensured:
-            await self._ensure_chat_history_indexes()
+        await self._ensure_chat_history_indexes()
             self._indexes_ensured = True
     
     async def answer(self, query: str, session_id: Optional[str] = None) -> dict:

@@ -558,8 +558,9 @@
 /* Bridge: Hero 배경이 AI Engine까지 끊김 없이 이어짐 */
 .linkai-bridge {
   width: 100%;
-  background: linear-gradient(160deg, rgba(24, 144, 255, 0.08) 0%, rgba(24, 144, 255, 0.02) 50%, transparent 100%);
-  padding-bottom: 1px;
+  min-height: 100vh;
+  background: linear-gradient(to bottom, #ffffff 0%, #ebf5ff 50%, #d6e9ff 100%);
+  padding-bottom: 0;
 }
 
 .linkai-bridge-slogan {
@@ -581,20 +582,237 @@
 
 .linkai-section-after-footer-ai {
   padding-top: 56px;
+  position: relative;
+  z-index: 10;
 }
 
 .linkai-section-bullets-ai .linkai-section-bullets-text,
 .linkai-section-bullets-ai .linkai-section-bullets-text span {
   letter-spacing: -0.02em;
-  line-height: 1.6;
+  line-height: 1.75;
+  font-size: 1.125rem;
+  color: #334155;
 }
 
 .linkai-keyword {
   color: var(--primary, #2563eb);
 }
 
+/* Advanced Search 섹션: 상단 그라데이션 + 넉넉한 패딩 */
+.linkai-advanced-section-bg {
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+  min-height: 100vh;
+  z-index: 20;
+  background: linear-gradient(to bottom, #d6e9ff 0%, #ffffff 100%);
+}
+
 .linkai-section-after-footer-advanced {
-  padding-top: 48px;
+  padding-top: 128px;
+  padding-bottom: 120px;
+  position: relative;
+}
+
+.linkai-advanced-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.linkai-advanced-heading {
+  margin: 0 0 22px;
+  text-align: center;
+  font-size: 2.25rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: #0f172a;
+}
+
+.linkai-advanced-lead {
+  margin: 0 auto 10px;
+  max-width: 720px;
+  text-align: center;
+  font-size: 1.125rem;
+  line-height: 1.75;
+  letter-spacing: -0.01em;
+  color: #334155;
+}
+
+.linkai-advanced-emphasis {
+  color: #2563eb;
+  font-weight: 600;
+}
+
+.linkai-advanced-board {
+  margin-top: 32px;
+  padding: 28px 28px 26px;
+  border-radius: 32px;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(18px);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.linkai-advanced-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.linkai-advanced-row {
+  display: grid;
+  grid-template-columns: 500px 120px minmax(0, 1fr);
+  column-gap: 16px;
+  align-items: center;
+}
+
+.linkai-advanced-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.linkai-advanced-field-main {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.linkai-advanced-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.linkai-advanced-input {
+  width: 100%;
+  border-radius: 999px;
+  border: 1px solid #e2e8f0;
+  padding: 11px 16px;
+  font-size: 0.9rem;
+  color: #0f172a;
+  background: #ffffff;
+}
+
+.linkai-advanced-input::placeholder {
+  color: #cbd5e1;
+}
+
+.linkai-advanced-input:focus-visible {
+  outline: none;
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.6);
+}
+
+.linkai-advanced-operator-group {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 2px;
+  border-radius: 999px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.linkai-advanced-operator {
+  border: none;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  background: transparent;
+}
+
+.linkai-advanced-operator.is-active {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.linkai-advanced-form-footer {
+  margin-top: 12px;
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+}
+
+.linkai-advanced-filter-button {
+  border-radius: 999px;
+  border: 1px solid #e2e8f0;
+  padding: 9px 16px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #64748b;
+  background: #f8fafc;
+}
+
+.linkai-advanced-submit-button {
+  border-radius: 999px;
+  border: none;
+  padding: 10px 20px;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: #ffffff;
+  background: #2563eb;
+  box-shadow: 0 10px 22px rgba(59, 130, 246, 0.28);
+}
+
+.linkai-advanced-guide {
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-start;
+}
+
+.linkai-advanced-guide-list {
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.linkai-advanced-guide-item {
+  position: relative;
+  padding: 10px 16px;
+  border-radius: 14px;
+  background: #ffffff;
+  border: 1px solid rgba(16, 185, 129, 0.5);
+  font-size: 0.8rem;
+  line-height: 1.7;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  justify-self: flex-start;
+}
+
+.linkai-advanced-guide-item--muted {
+  border-style: solid;
+  border-color: rgba(16, 185, 129, 0.5);
+  color: #6b7280;
+}
+
+.linkai-advanced-guide-item::before {
+  content: "";
+  position: absolute;
+  left: -8px;
+  top: 50%;
+  transform: translateY(-50%) rotate(45deg);
+  width: 10px;
+  height: 10px;
+  background: #ffffff;
+  border-left: 1px solid rgba(16, 185, 129, 0.5);
+  border-bottom: 1px solid rgba(16, 185, 129, 0.5);
+}
+
+.linkai-advanced-grid {
+  margin-top: 32px;
 }
 
 .linkai-advanced-grid {
@@ -643,6 +861,22 @@
   font-size: 14px;
   line-height: 1.7;
   color: var(--text-sub);
+}
+
+.linkai-advanced-cta-wrap {
+  margin-top: 96px;
+  display: flex;
+  justify-content: center;
+}
+
+.linkai-advanced-cta-wrap .linkai-cta-to-hero {
+  position: relative;
+  z-index: 30;
+}
+
+.linkai-cta-to-hero-wrap-ai {
+  margin-top: 40px;
+  padding-bottom: 40px;
 }
 
 @media (max-width: 1024px) {
@@ -1202,16 +1436,16 @@
 .linkai-rag-workspace-body {
   padding: 16px 14px;
   background-color: #f8fafc;
-  background-image: linear-gradient(rgba(148, 163, 184, 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(148, 163, 184, 0.06) 1px, transparent 1px);
+  background-image: linear-gradient(rgba(148, 163, 184, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.03) 1px, transparent 1px);
   background-size: 12px 12px;
   box-sizing: border-box;
 }
 
 [data-theme="dark"] .linkai-rag-workspace-body {
   background-color: #0f172a;
-  background-image: linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-image: linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
 }
 
 /* 1. 사용자 질문(말풍선) + 추출된 키워드 */
