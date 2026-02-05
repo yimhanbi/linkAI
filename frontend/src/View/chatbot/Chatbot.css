@@ -268,7 +268,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  width: min(680px, 100%);
+  width: min(820px, 100%);
   margin: 0 auto;
   padding: 14px 20px;
   border-radius: 9999px;
@@ -288,7 +288,7 @@
 .chatbot-window
   .react-chatbot-kit-chat-input-container:not(:has(.react-chatbot-kit-chat-input-form))
   .react-chatbot-kit-chat-input {
-  width: min(680px, 100%);
+  width: min(820px, 100%);
 }
 
 .chatbot-window .react-chatbot-kit-chat-input {
@@ -548,12 +548,39 @@
   width: auto !important;
   max-width: min(88%, 620px);
   padding: 20px 26px !important;
-  line-height: 1.72;
+  line-height: 1.65;
+  font-size: 15px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
   hyphens: auto;
   border-radius: 16px;
+}
+
+/* 메시지 내 텍스트/리스트 가독성 */
+.chatbot-window .react-chatbot-kit-chat-bot-message p,
+.chatbot-window .react-chatbot-kit-user-chat-message p {
+  margin: 0 0 6px;
+  line-height: 1.65;
+}
+
+.chatbot-window .react-chatbot-kit-chat-bot-message p:last-child,
+.chatbot-window .react-chatbot-kit-user-chat-message p:last-child {
+  margin-bottom: 0;
+}
+
+.chatbot-window .react-chatbot-kit-chat-bot-message ul,
+.chatbot-window .react-chatbot-kit-chat-bot-message ol,
+.chatbot-window .react-chatbot-kit-user-chat-message ul,
+.chatbot-window .react-chatbot-kit-user-chat-message ol {
+  margin: 0 0 8px 18px;
+  padding-left: 18px;
+}
+
+.chatbot-window .react-chatbot-kit-chat-bot-message li,
+.chatbot-window .react-chatbot-kit-user-chat-message li {
+  margin-bottom: 4px;
+  line-height: 1.6;
 }
 
 /* ==============================
