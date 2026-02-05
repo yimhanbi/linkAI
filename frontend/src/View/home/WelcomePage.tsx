@@ -1,45 +1,25 @@
 import { Typography } from "antd";
+import { ArrowUp } from "lucide-react";
 import AIEngineScrollSection from "./AIEngineScrollSection";
 import ScrollTriggerWrapper from "./ScrollTriggerWrapper";
 import "./WelcomePage.css";
 
 const { Title, Text } = Typography;
+const CTA_HERO_TEXT = "지금 바로 1~3단계 분석 경험하기";
+
+function scrollToHero(e: React.MouseEvent<HTMLAnchorElement>): void {
+  e.preventDefault();
+  document.getElementById("hero")?.scrollIntoView({ behavior: "smooth" });
+}
 
 export default function WelcomePage() {
   return (
     <div className="linkai-welcome-root">
-      <header className="linkai-topbar">
-        <div className="linkai-topbar-inner">
-          <a href="/" className="linkai-logo">
-            LinkAI
-          </a>
-          <div className="linkai-topnav">
-            <nav className="linkai-topnav-left">
-              <a href="/chatbot" className="linkai-topnav-link">
-                AI Engine
-              </a>
-              <a href="/advanced-search" className="linkai-topnav-link">
-                Advanced Search
-              </a>
-            </nav>
-            <nav className="linkai-topnav-right">
-              <a href="/dashboard" className="linkai-topnav-link">
-                대시보드
-              </a>
-              <span className="linkai-topnav-separator">|</span>
-              <a href="/contact" className="linkai-topnav-link">
-                이용문의
-              </a>
-            </nav>
-          </div>
-        </div>
-      </header>
-
       <ScrollTriggerWrapper />
 
       <div className="linkai-bridge">
         <p className="linkai-bridge-slogan">
-          기술사업화의 새로운 기준, AI Engine
+          기술사업화의 새로운 기준, LinkAI
         </p>
         <section className="linkai-section linkai-section-after-footer linkai-section-after-footer-ai">
           <Title level={2} className="linkai-section-title">
@@ -55,6 +35,18 @@ export default function WelcomePage() {
 
           <AIEngineScrollSection />
         </section>
+      </div>
+
+      <div className="linkai-cta-to-hero-wrap">
+        <a
+          href="#hero"
+          className="linkai-cta-to-hero"
+          aria-label="상단 검색창으로 이동"
+          onClick={scrollToHero}
+        >
+          <ArrowUp className="linkai-cta-to-hero-icon" size={18} aria-hidden />
+          <span>{CTA_HERO_TEXT}</span>
+        </a>
       </div>
 
       <section className="linkai-section linkai-section-after-footer linkai-section-after-footer-advanced">

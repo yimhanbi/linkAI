@@ -89,6 +89,21 @@ export default function HeroSection(): React.ReactElement {
           aria-label="특허 질문 입력"
         />
 
+        <div className="linkai-hero-quicklinks">
+          <a
+            href="/chatbot"
+            className="linkai-hero-quicklink linkai-hero-quicklink-ai"
+          >
+            챗봇 서비스
+          </a>
+          <a
+            href="/advanced-search"
+            className="linkai-hero-quicklink linkai-hero-quicklink-search"
+          >
+            특허 검색 서비스
+          </a>
+        </div>
+
         {isSubmitting && statusStep >= 0 && statusStep < STATUS_MESSAGES.length && (
           <div className="linkai-hero-status" role="status" aria-live="polite">
             <span className="linkai-hero-status-spinner" aria-hidden />

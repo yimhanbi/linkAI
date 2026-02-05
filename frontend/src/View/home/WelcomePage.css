@@ -165,7 +165,7 @@
 .linkai-hero-content-sticky {
   width: 100%;
   max-width: 960px;
-  padding: 48px 24px 28px;
+  padding: 96px 24px 60px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -178,7 +178,7 @@
   position: relative;
   width: 100%;
   max-width: 560px;
-  margin-top: 28px;
+  margin-top: 44px;
 }
 
 .linkai-hero-input-inner {
@@ -295,6 +295,93 @@
 .linkai-hero-status-text {
   font-size: 13px;
   color: var(--text-sub);
+}
+
+/* Hero placeholder 아래 퀵 링크 (은은하지만 튀는 컬러, 한글 설명 포함) */
+.linkai-hero-quicklinks {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 20px;
+  margin-top: 40px;
+}
+
+.linkai-hero-quicklink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px 36px;
+  min-height: 56px;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  border-radius: 16px;
+  text-decoration: none;
+  transition: all 0.25s ease;
+  border: 1.5px solid transparent;
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+}
+
+.linkai-hero-quicklink:hover {
+  transform: translateY(-2px);
+}
+
+/* AI Engine: 은은한 파스텔 블루 (튀지만 부드러움) */
+.linkai-hero-quicklink-ai {
+  color: #1e40af;
+  background: rgba(219, 234, 254, 0.9);
+  border-color: rgba(96, 165, 250, 0.5);
+  box-shadow: 0 2px 12px rgba(59, 130, 246, 0.18);
+}
+
+.linkai-hero-quicklink-ai:hover {
+  background: rgba(191, 219, 254, 0.95);
+  border-color: rgba(59, 130, 246, 0.7);
+  color: #1e3a8a;
+  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.28);
+}
+
+/* Advanced Search: 은은한 파스텔 그린 (튀지만 부드러움) */
+.linkai-hero-quicklink-search {
+  color: #166534;
+  background: rgba(220, 252, 231, 0.9);
+  border-color: rgba(74, 222, 128, 0.5);
+  box-shadow: 0 2px 12px rgba(34, 197, 94, 0.18);
+}
+
+.linkai-hero-quicklink-search:hover {
+  background: rgba(187, 247, 208, 0.95);
+  border-color: rgba(34, 197, 94, 0.7);
+  color: #14532d;
+  box-shadow: 0 4px 20px rgba(34, 197, 94, 0.28);
+}
+
+[data-theme="dark"] .linkai-hero-quicklink-ai {
+  color: #bfdbfe;
+  background: rgba(30, 58, 138, 0.3);
+  border-color: rgba(96, 165, 250, 0.4);
+  box-shadow: 0 2px 12px rgba(59, 130, 246, 0.2);
+}
+
+[data-theme="dark"] .linkai-hero-quicklink-ai:hover {
+  background: rgba(30, 58, 138, 0.4);
+  border-color: rgba(96, 165, 250, 0.6);
+  color: #dbeafe;
+  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.3);
+}
+
+[data-theme="dark"] .linkai-hero-quicklink-search {
+  color: #bbf7d0;
+  background: rgba(20, 83, 45, 0.3);
+  border-color: rgba(74, 222, 128, 0.4);
+  box-shadow: 0 2px 12px rgba(34, 197, 94, 0.2);
+}
+
+[data-theme="dark"] .linkai-hero-quicklink-search:hover {
+  background: rgba(20, 83, 45, 0.4);
+  border-color: rgba(74, 222, 128, 0.6);
+  color: #dcfce7;
+  box-shadow: 0 4px 20px rgba(34, 197, 94, 0.3);
 }
 
 .linkai-hero-headline {
@@ -493,7 +580,7 @@
 }
 
 .linkai-section-after-footer-ai {
-  padding-top: 24px;
+  padding-top: 56px;
 }
 
 .linkai-section-bullets-ai .linkai-section-bullets-text,
@@ -507,7 +594,7 @@
 }
 
 .linkai-section-after-footer-advanced {
-  padding-top: 160px;
+  padding-top: 48px;
 }
 
 .linkai-advanced-grid {
@@ -568,7 +655,7 @@
   }
 
   .linkai-section-after-footer-advanced {
-    padding-top: 128px;
+    padding-top: 40px;
   }
 }
 
@@ -582,7 +669,7 @@
   }
 
   .linkai-section-after-footer-advanced {
-    padding-top: 96px;
+    padding-top: 32px;
   }
 }
 
@@ -704,6 +791,830 @@
   color: var(--text-sub);
 }
 
+/* ----- AI Engine 2단계: 하이브리드 검색 결과 리포트 ----- */
+.linkai-hybrid-report {
+  margin-top: 4px;
+  padding: 20px;
+  background: var(--bg);
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background-image: linear-gradient(rgba(15, 23, 42, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.02) 1px, transparent 1px);
+  background-size: 12px 12px;
+  box-sizing: border-box;
+}
+
+.linkai-hybrid-report-summary {
+  display: inline-block;
+  font-size: 0.75rem;
+  color: #94a3b8;
+  background: #f8fafc;
+  border-radius: 9999px;
+  padding: 6px 12px;
+  margin-bottom: 16px;
+}
+
+[data-theme="dark"] .linkai-hybrid-report-summary {
+  background: rgba(15, 23, 42, 0.5);
+  color: #94a3b8;
+}
+
+.linkai-hybrid-report-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.linkai-hybrid-report-card {
+  padding: 16px;
+  margin-bottom: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: var(--bg);
+  position: relative;
+  box-sizing: border-box;
+  cursor: pointer;
+}
+
+.linkai-hybrid-report-card:hover {
+  border-color: #fde68a;
+  background: #fffbeb;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.1);
+}
+
+.linkai-hybrid-report-card:last-child {
+  margin-bottom: 0;
+}
+
+[data-theme="dark"] .linkai-hybrid-report-card {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .linkai-hybrid-report-card:hover {
+  border-color: rgba(253, 230, 138, 0.5);
+  background: rgba(254, 243, 199, 0.12);
+  box-shadow: 0 2px 12px rgba(245, 158, 11, 0.15);
+}
+
+.linkai-hybrid-report-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.linkai-hybrid-badge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.linkai-hybrid-badge-context {
+  background: rgba(59, 130, 246, 0.12);
+  color: #2563eb;
+}
+
+.linkai-hybrid-badge-keyword {
+  background: rgba(34, 197, 94, 0.12);
+  color: #16a34a;
+}
+
+.linkai-hybrid-report-card-number {
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--text-sub);
+  margin-bottom: 4px;
+}
+
+.linkai-hybrid-report-card-title {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.linkai-hybrid-report-card-snippet {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-sub);
+  margin: 0;
+}
+
+/* ----- AI Engine 3단계: 청구항 심층 분석 뷰어 ----- */
+.linkai-claim-viewer {
+  margin-top: 4px;
+  padding: 0;
+  background: #fafafa;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+  box-sizing: border-box;
+  background-image: linear-gradient(rgba(15, 23, 42, 0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.015) 1px, transparent 1px);
+  background-size: 10px 10px;
+}
+
+[data-theme="dark"] .linkai-claim-viewer {
+  background: rgba(15, 23, 42, 0.4);
+  border-color: rgba(255, 255, 255, 0.1);
+  background-image: linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+}
+
+.linkai-claim-block {
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.linkai-claim-block:last-child {
+  border-bottom: none;
+}
+
+[data-theme="dark"] .linkai-claim-block {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+.linkai-claim-viewer-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #f1f5f9;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+[data-theme="dark"] .linkai-claim-viewer-header {
+  background: rgba(15, 23, 42, 0.6);
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+.linkai-claim-viewer-header-icon {
+  flex-shrink: 0;
+  color: #475569;
+}
+
+.linkai-claim-viewer-header-text {
+  font-size: 12px;
+  color: #475569;
+  letter-spacing: 0.01em;
+}
+
+.linkai-claim-viewer-split {
+  display: grid;
+  grid-template-columns: 1fr minmax(0, 280px);
+  gap: 20px;
+  padding: 16px 14px;
+  align-items: start;
+}
+
+@media (max-width: 720px) {
+  .linkai-claim-viewer-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+.linkai-claim-viewer-original-label,
+.linkai-claim-viewer-insights-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #64748b;
+  margin-bottom: 8px;
+}
+
+.linkai-claim-viewer-claim-text {
+  font-size: 12px;
+  line-height: 1.65;
+  letter-spacing: 0.01em;
+  color: var(--text);
+}
+
+.linkai-claim-highlight-wrap {
+  display: inline;
+  position: relative;
+}
+
+.linkai-claim-highlight {
+  background: #eff6ff;
+  color: #1d4ed8;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+[data-theme="dark"] .linkai-claim-highlight {
+  background: rgba(59, 130, 246, 0.2);
+  color: #93c5fd;
+}
+
+.linkai-claim-annotation {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 600;
+  color: #64748b;
+  margin-left: 4px;
+  vertical-align: super;
+}
+
+.linkai-claim-viewer-insights {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.linkai-claim-insight-card {
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: var(--bg);
+  cursor: default;
+}
+
+.linkai-claim-insight-card:hover {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  box-shadow: 0 1px 4px rgba(59, 130, 246, 0.12);
+}
+
+[data-theme="dark"] .linkai-claim-insight-card {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .linkai-claim-insight-card:hover {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(96, 165, 250, 0.5);
+  box-shadow: 0 1px 6px rgba(59, 130, 246, 0.15);
+}
+
+/* 3단계 섹션이 활성(스크롤 인뷰)일 때 인사이트 카드 은은한 블루 강조 */
+.linkai-scroll-reactive-block[data-active="true"] .linkai-claim-insight-card {
+  background: #f8fafc;
+  border-color: #bfdbfe;
+}
+
+.linkai-scroll-reactive-block[data-active="true"] .linkai-claim-insight-card:hover {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  box-shadow: 0 1px 4px rgba(59, 130, 246, 0.12);
+}
+
+[data-theme="dark"] .linkai-scroll-reactive-block[data-active="true"] .linkai-claim-insight-card {
+  background: rgba(59, 130, 246, 0.06);
+  border-color: rgba(96, 165, 250, 0.25);
+}
+
+[data-theme="dark"] .linkai-scroll-reactive-block[data-active="true"] .linkai-claim-insight-card:hover {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(96, 165, 250, 0.5);
+}
+
+.linkai-claim-insight-card-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #475569;
+  margin-bottom: 4px;
+}
+
+.linkai-claim-insight-card-body {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text);
+  margin: 0;
+  white-space: pre-line;
+}
+
+.linkai-claim-viewer-conclusion {
+  padding: 12px 14px;
+  border-top: 1px solid #e2e8f0;
+}
+
+[data-theme="dark"] .linkai-claim-viewer-conclusion {
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+
+.linkai-claim-viewer-conclusion-line {
+  display: none;
+}
+
+.linkai-claim-viewer-conclusion-text {
+  font-size: 12px;
+  font-style: italic;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--text);
+  margin: 0;
+}
+
+/* ----- AI Engine 4단계: Vision & Logic UI/UX (디지털 캔버스) ----- */
+.linkai-rag-workspace {
+  margin-top: 4px;
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  border-radius: 1rem;
+  overflow: hidden;
+  box-sizing: border-box;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+[data-theme="dark"] .linkai-rag-workspace {
+  background: #0f172a;
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+}
+
+.linkai-rag-workspace-top {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 14px 12px;
+  background: #ffffff;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+[data-theme="dark"] .linkai-rag-workspace-top {
+  background: rgba(15, 23, 42, 0.6);
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+.linkai-rag-top-badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: #fff7ed;
+  color: #ea580c;
+}
+
+[data-theme="dark"] .linkai-rag-top-badge {
+  background: rgba(234, 88, 12, 0.15);
+  color: #fb923c;
+}
+
+.linkai-rag-workspace-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #2563eb;
+  margin: 0;
+  text-align: center;
+  line-height: 1.4;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+[data-theme="dark"] .linkai-rag-workspace-title {
+  color: #60a5fa;
+}
+
+/* AI가 만들고 있다는 시각적 큐: 깜빡이는 커서 */
+.linkai-rag-status-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: #2563eb;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: linkai-rag-cursor-blink 1s step-end infinite;
+}
+
+[data-theme="dark"] .linkai-rag-status-cursor {
+  background: #60a5fa;
+}
+
+@keyframes linkai-rag-cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.linkai-rag-workspace-body {
+  padding: 16px 14px;
+  background-color: #f8fafc;
+  background-image: linear-gradient(rgba(148, 163, 184, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.06) 1px, transparent 1px);
+  background-size: 12px 12px;
+  box-sizing: border-box;
+}
+
+[data-theme="dark"] .linkai-rag-workspace-body {
+  background-color: #0f172a;
+  background-image: linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+}
+
+/* 1. 사용자 질문(말풍선) + 추출된 키워드 */
+.linkai-rag-question-block {
+  margin-bottom: 18px;
+}
+
+.linkai-rag-question-bubble {
+  position: relative;
+  padding: 12px 16px;
+  background: #e0f2fe;
+  border: 1px solid #7dd3fc;
+  border-radius: 14px 14px 14px 4px;
+  margin-bottom: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  box-sizing: border-box;
+  max-width: 100%;
+}
+
+.linkai-rag-question-bubble::before {
+  content: "";
+  position: absolute;
+  left: 12px;
+  bottom: -6px;
+  width: 10px;
+  height: 10px;
+  background: #e0f2fe;
+  border-left: 1px solid #7dd3fc;
+  border-bottom: 1px solid #7dd3fc;
+  transform: rotate(-45deg);
+}
+
+[data-theme="dark"] .linkai-rag-question-bubble {
+  background: rgba(56, 189, 248, 0.2);
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+[data-theme="dark"] .linkai-rag-question-bubble::before {
+  background: rgba(56, 189, 248, 0.2);
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+.linkai-rag-question-bubble-label {
+  display: block;
+  font-size: 0.625rem;
+  font-weight: 700;
+  color: #0369a1;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+
+[data-theme="dark"] .linkai-rag-question-bubble-label {
+  color: #38bdf8;
+}
+
+.linkai-rag-question-text {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--text);
+  margin: 0;
+}
+
+.linkai-rag-keywords-caption {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #64748b;
+  margin: 0 0 8px;
+}
+
+[data-theme="dark"] .linkai-rag-keywords-caption {
+  color: #94a3b8;
+}
+
+.linkai-rag-keywords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.linkai-rag-keyword-tag {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #2563eb;
+  background: #eff6ff;
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+[data-theme="dark"] .linkai-rag-keyword-tag {
+  color: #93c5fd;
+  background: rgba(59, 130, 246, 0.2);
+}
+
+/* 2. 스택: 터미널 → 관계도 (세로 배치) */
+.linkai-rag-process-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+/* A. 스트리밍 로그 영역 (다크 터미널) */
+.linkai-rag-terminal {
+  min-height: 100px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.linkai-rag-terminal-inner {
+  flex: 1;
+  min-height: 0;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 0.375rem;
+  padding: 12px 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-sizing: border-box;
+}
+
+[data-theme="dark"] .linkai-rag-terminal-inner {
+  background: #020617;
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.linkai-rag-log-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-family: ui-monospace, "Cascadia Code", "Source Code Pro", monospace;
+  font-size: 0.75rem;
+  line-height: 1.6;
+  color: #94a3b8;
+  margin-bottom: 6px;
+}
+
+.linkai-rag-log-line:last-child {
+  margin-bottom: 0;
+}
+
+.linkai-rag-log-dot {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.linkai-rag-log-dot-success {
+  background: #22c55e;
+}
+
+.linkai-rag-log-dot-running {
+  background: #2563eb;
+}
+
+.linkai-rag-log-text {
+  min-width: 0;
+}
+
+/* B. 관계도 시각화 (내 질문 → 강O태, 단일 연결) */
+.linkai-rag-graph {
+  min-height: 120px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.linkai-rag-graph-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  padding: 14px 12px;
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  box-sizing: border-box;
+}
+
+.linkai-rag-graph-inner.linkai-rag-graph-single {
+  gap: 8px;
+}
+
+[data-theme="dark"] .linkai-rag-graph-inner {
+  background: rgba(15, 23, 42, 0.6);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.linkai-rag-graph-node {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: var(--text);
+  box-sizing: border-box;
+}
+
+[data-theme="dark"] .linkai-rag-graph-node {
+  background: rgba(30, 41, 59, 0.8);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.linkai-rag-graph-node-center {
+  color: #2563eb;
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+[data-theme="dark"] .linkai-rag-graph-node-center {
+  color: #93c5fd;
+  border-color: rgba(96, 165, 250, 0.4);
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.linkai-rag-graph-node-outer {
+  font-size: 0.6875rem;
+}
+
+.linkai-rag-graph-connection {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.linkai-rag-graph-edge-bold {
+  width: 2px;
+  height: 20px;
+  background: #2563eb;
+  border-radius: 1px;
+}
+
+[data-theme="dark"] .linkai-rag-graph-edge-bold {
+  background: #60a5fa;
+}
+
+.linkai-rag-graph-edge-mid-label {
+  font-size: 0.5625rem;
+  font-weight: 600;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+[data-theme="dark"] .linkai-rag-graph-edge-mid-label {
+  color: #94a3b8;
+}
+
+.linkai-rag-graph-similarity {
+  font-size: 0.5625rem;
+  font-weight: 600;
+  color: #2563eb;
+  margin-top: 2px;
+}
+
+[data-theme="dark"] .linkai-rag-graph-similarity {
+  color: #60a5fa;
+}
+
+/* 3. 하단: 전략 수립 미리보기 (생성 중 예시, opacity-80) */
+.linkai-rag-cards-wrap {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  min-height: 0;
+}
+
+.linkai-rag-insight-card {
+  padding: 12px 14px;
+  background: #ffffff;
+  border: 1px solid #f1f5f9;
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  box-sizing: border-box;
+  position: relative;
+  opacity: 0.8;
+}
+
+[data-theme="dark"] .linkai-rag-insight-card {
+  background: rgba(30, 41, 59, 0.6);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.linkai-rag-card-badge {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  font-size: 0.5625rem;
+  font-weight: 700;
+  color: #ea580c;
+  background: #fff7ed;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+[data-theme="dark"] .linkai-rag-card-badge {
+  color: #fb923c;
+  background: rgba(234, 88, 12, 0.2);
+}
+
+.linkai-rag-card-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #475569;
+  margin: 0 0 6px;
+  line-height: 1.35;
+}
+
+.linkai-rag-card-body {
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--text-sub);
+  margin: 0;
+}
+
+.linkai-rag-workspace-footer {
+  padding: 10px 14px;
+  font-size: 0.625rem;
+  color: #64748b;
+  text-align: center;
+  border-top: 1px solid #f1f5f9;
+  background: #ffffff;
+}
+
+[data-theme="dark"] .linkai-rag-workspace-footer {
+  background: rgba(15, 23, 42, 0.5);
+  border-top-color: rgba(255, 255, 255, 0.08);
+  color: #94a3b8;
+}
+
+/* ----- AI Engine ↔ Advanced Search 사이 CTA (Hero로 스무스 스크롤) ----- */
+.linkai-cta-to-hero-wrap {
+  padding: 48px 48px 56px;
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: transparent;
+}
+
+.linkai-cta-to-hero {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 24px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #2563eb;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  text-decoration: none;
+  transition: background 0.2s ease, color 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.linkai-cta-to-hero:hover {
+  color: #1d4ed8;
+  background: #dbeafe;
+  border-color: #93c5fd;
+}
+
+[data-theme="dark"] .linkai-cta-to-hero-wrap {
+  background: transparent;
+}
+
+[data-theme="dark"] .linkai-cta-to-hero {
+  color: #60a5fa;
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(96, 165, 250, 0.3);
+}
+
+[data-theme="dark"] .linkai-cta-to-hero:hover {
+  color: #93c5fd;
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(96, 165, 250, 0.5);
+}
+
+.linkai-cta-to-hero-icon {
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .linkai-cta-to-hero-wrap {
+    padding: 32px 24px 40px;
+  }
+}
+
+@media (max-width: 640px) {
+  .linkai-rag-cards-wrap {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ----- AI Engine 첫 단계: 정적 특허 데모 ----- */
 .linkai-static-demo {
   margin-top: 4px;
@@ -739,6 +1650,10 @@
 
 .linkai-static-demo-bubble strong {
   font-weight: 700;
+}
+
+.linkai-demo-chat-wrap {
+  margin-top: 4px;
 }
 
 .linkai-demo-chat {
@@ -862,6 +1777,11 @@
 }
 
 @media (max-width: 640px) {
+  .linkai-section-after-footer {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+
   .linkai-scroll-reactive {
     margin-top: 48px;
   }

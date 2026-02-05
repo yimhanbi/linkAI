@@ -1,7 +1,10 @@
-import React, { useRef } from "react";
+import React, { useRef, useState } from "react";
 import { Sparkles, Database, FileSearch, ShieldCheck } from "lucide-react";
 import { useScrollReactiveSections } from "./useScrollReactiveSections";
-import AIEngineStaticDemo from "./AIEngineStaticDemo";
+import AIEngineDemoChat from "./AIEngineDemoChat";
+import HybridSearchReport from "./HybridSearchReport";
+import ClaimDeepDiveViewer from "./ClaimDeepDiveViewer";
+import RAGReportViewer from "./RAGReportViewer";
 import "./WelcomePage.css";
 
 const LEFT_ITEMS: { label: string; body: string }[] = [
@@ -57,6 +60,8 @@ const RIGHT_BLOCKS: ReadonlyArray<{
 export default function AIEngineScrollSection(): React.ReactElement {
   const rightColumnRef = useRef<HTMLDivElement>(null);
   const activeIndex = useScrollReactiveSections(rightColumnRef, LEFT_ITEMS.length);
+  const [demoHovered, setDemoHovered] = useState(false);
+  const demoTrigger = activeIndex === 0 || demoHovered;
 
   return (
     <div className="linkai-scroll-reactive">
@@ -91,6 +96,8 @@ export default function AIEngineScrollSection(): React.ReactElement {
                 className="linkai-scroll-reactive-block"
                 data-scroll-section
                 data-active={isActive ? "true" : "false"}
+                onMouseEnter={isFirstBlock ? () => setDemoHovered(true) : undefined}
+                onMouseLeave={isFirstBlock ? () => setDemoHovered(false) : undefined}
               >
                 <div
                   className="linkai-scroll-reactive-block-icon"
@@ -103,7 +110,15 @@ export default function AIEngineScrollSection(): React.ReactElement {
                   {block.title}
                 </h3>
                 {isFirstBlock ? (
-                  <AIEngineStaticDemo />
+                  <div className="linkai-demo-chat-wrap">
+                    <AIEngineDemoChat trigger={demoTrigger} />
+                  </div>
+                ) : i === 1 ? (
+                  <HybridSearchReport />
+                ) : i === 2 ? (
+                  <ClaimDeepDiveViewer />
+                ) : i === 3 ? (
+                  <RAGReportViewer />
                 ) : (
                   <p className="linkai-scroll-reactive-block-content">
                     {block.content}
