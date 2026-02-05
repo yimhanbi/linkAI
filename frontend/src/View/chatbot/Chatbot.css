@@ -207,19 +207,21 @@
   flex: 1 1 auto;
   height: auto !important;
   overflow-y: auto;
-  scroll-behavior: smooth; /* 스크롤이 부드럽게 이동 */
-  /* Leave space for the new pill input */
-  padding-bottom: 120px;
+  scroll-behavior: smooth;
+  padding: 24px 40px 96px;
+  box-sizing: border-box;
 }
 
-/* 메시지 내용을 가운데 정렬하는 wrapper */
+/* 메시지 행 간격 + 가운데 정렬, 넉넉한 좌우 여백 */
 .chatbot-window .react-chatbot-kit-chat-bot-message-container,
 .chatbot-window .react-chatbot-kit-user-chat-message-container {
-  max-width: 920px;
+  max-width: 680px;
   margin-left: auto;
   margin-right: auto;
-  padding-left: 20px;
-  padding-right: 20px;
+  margin-top: 6px;
+  margin-bottom: 20px;
+  padding-left: 0;
+  padding-right: 0;
   box-sizing: border-box;
 }
 
@@ -258,17 +260,17 @@
 /* ---- ChatGPT/Gemini-like input (pill) ---- */
 .chatbot-window .react-chatbot-kit-chat-input-container {
   background: transparent;
-  padding: 18px 18px 24px;
+  padding: 24px 40px 32px;
 }
 
 /* Some versions wrap input+button in a <form> with this class */
 .chatbot-window .react-chatbot-kit-chat-input-form {
   display: flex;
   align-items: center;
-  gap: 10px;
-  width: min(920px, 100%);
+  gap: 12px;
+  width: min(680px, 100%);
   margin: 0 auto;
-  padding: 10px 12px;
+  padding: 14px 20px;
   border-radius: 9999px;
   border: 1px solid var(--border);
   background: var(--bg);
@@ -286,7 +288,7 @@
 .chatbot-window
   .react-chatbot-kit-chat-input-container:not(:has(.react-chatbot-kit-chat-input-form))
   .react-chatbot-kit-chat-input {
-  width: min(920px, 100%);
+  width: min(680px, 100%);
 }
 
 .chatbot-window .react-chatbot-kit-chat-input {
@@ -434,10 +436,10 @@
 .chatbot-window .linkai-progress-message {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  margin: 12px auto; /* 가운데 정렬 */
-  max-width: 920px;
-  padding: 0 20px;
+  gap: 14px;
+  margin: 6px auto 20px;
+  max-width: 680px;
+  padding: 0;
   box-sizing: border-box;
 }
 
@@ -476,10 +478,10 @@
 .chatbot-window .linkai-status-message {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin: 4px auto 0;
-  max-width: 920px;
-  padding: 0 20px;
+  gap: 8px;
+  margin: 0 auto 20px;
+  max-width: 680px;
+  padding: 0;
   box-sizing: border-box;
   font-size: 12px;
   color: var(--text-sub);
@@ -540,16 +542,18 @@
   }
 }
 
-/* ---- Bubble sizing + long text wrapping ---- */
+/* ---- Bubble sizing + long text wrapping + 넉넉한 내부 여백 ---- */
 .chatbot-window .react-chatbot-kit-chat-bot-message,
 .chatbot-window .react-chatbot-kit-user-chat-message {
-  width: auto !important; /* override library fixed width (bot bubble) */
-  max-width: min(72%, 640px);
-  line-height: 1.6; /* 줄 간격을 조금 더 넉넉하게 */
-  white-space: pre-wrap; /* keep \n from backend + wrap normal text */
-  overflow-wrap: anywhere; /* break long URLs/ids */
+  width: auto !important;
+  max-width: min(88%, 620px);
+  padding: 20px 26px !important;
+  line-height: 1.72;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   word-break: break-word;
   hyphens: auto;
+  border-radius: 16px;
 }
 
 /* ==============================

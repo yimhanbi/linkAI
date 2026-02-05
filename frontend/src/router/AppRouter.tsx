@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import MainLayout from "../View/layout/MainLayout";
 import AdvancedSearchPage from "../View/advancedSearch/AdvancedSearchPage";
 import LoginPage from "@/View/auth/LoginPage";
+import WelcomePage from "@/View/home/WelcomePage";
 
 export default function AppRouter() {
   // 1. 로컬 스토리지에서 토큰 확인 (로그인 여부) - 상태로 관리하여 변경 감지
@@ -31,16 +32,16 @@ export default function AppRouter() {
 
   return (
     <Routes>
-      {/* 기본 접속(/) 시: 로그인 여부에 따라 리다이렉트 */}
-      <Route 
-        path="/" 
-        element={isLoggedIn ? <Navigate to="/chatbot" replace /> : <Navigate to="/login" replace />} 
+      {/* 웰컴 페이지: 로그인 후 메인 랜딩 (Sidebar / Header 없음) */}
+      <Route
+        path="/"
+        element={isLoggedIn ? <WelcomePage /> : <Navigate to="/login" replace />}
       />
 
       {/* 로그인 페이지: 레이아웃 없이 단독으로 보여야 함 */}
       <Route 
         path="/login" 
-        element={isLoggedIn ? <Navigate to="/chatbot" replace /> : <LoginPage />} 
+        element={isLoggedIn ? <Navigate to="/" replace /> : <LoginPage />} 
       />
 
       {/* 메인 서비스 영역: 로그인한 경우에만 접근 가능 (MainLayout 적용) */}
