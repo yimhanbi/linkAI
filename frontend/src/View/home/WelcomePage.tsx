@@ -22,6 +22,8 @@ export default function WelcomePage() {
     "AND",
   ]);
 
+  const [activeHoverIndex, setActiveHoverIndex] = useState<number | null>(null);
+
   const handleOperatorClick = (index: number, value: "AND" | "OR"): void => {
     setOperators((prev) =>
       prev.map((op, i) => (i === index ? value : op))
@@ -89,7 +91,9 @@ export default function WelcomePage() {
                   <div className="linkai-advanced-field-main">
                     <label className="linkai-advanced-label">기술 키워드</label>
                     <input
-                      className="linkai-advanced-input"
+                      className={`linkai-advanced-input ${
+                        activeHoverIndex === 0 ? "linkai-advanced-input--highlight" : ""
+                      }`}
                       placeholder="예: 귀 질환 진단, 실시간 생체 신호 분석"
                     />
                   </div>
@@ -119,7 +123,11 @@ export default function WelcomePage() {
                       OR
                     </button>
                   </div>
-                  <div className="linkai-advanced-guide-item">
+                  <div
+                    className="linkai-advanced-guide-item"
+                    onMouseEnter={() => setActiveHoverIndex(0)}
+                    onMouseLeave={() => setActiveHoverIndex(null)}
+                  >
                     특허 원문 및 AI 기술 분석에서 추출된 핵심 기술 키워드로 검색
                   </div>
                 </div>
@@ -128,7 +136,9 @@ export default function WelcomePage() {
                   <div className="linkai-advanced-field-main">
                     <label className="linkai-advanced-label">제품 키워드</label>
                     <input
-                      className="linkai-advanced-input"
+                      className={`linkai-advanced-input ${
+                        activeHoverIndex === 1 ? "linkai-advanced-input--highlight" : ""
+                      }`}
                       placeholder="예: 인솔, 웨어러블 디바이스, 모듈"
                     />
                   </div>
@@ -158,7 +168,11 @@ export default function WelcomePage() {
                       OR
                     </button>
                   </div>
-                  <div className="linkai-advanced-guide-item">
+                  <div
+                    className="linkai-advanced-guide-item"
+                    onMouseEnter={() => setActiveHoverIndex(1)}
+                    onMouseLeave={() => setActiveHoverIndex(null)}
+                  >
                     기술이 적용될 수 있는 제품·응용 분야 중심 키워드로 검색
                   </div>
                 </div>
@@ -167,7 +181,9 @@ export default function WelcomePage() {
                   <div className="linkai-advanced-field-main">
                     <label className="linkai-advanced-label">책임연구자</label>
                     <input
-                      className="linkai-advanced-input"
+                      className={`linkai-advanced-input ${
+                        activeHoverIndex === 2 ? "linkai-advanced-input--highlight" : ""
+                      }`}
                       placeholder="예: 강O태, 이O준"
                     />
                   </div>
@@ -197,7 +213,11 @@ export default function WelcomePage() {
                       OR
                     </button>
                   </div>
-                  <div className="linkai-advanced-guide-item">
+                  <div
+                    className="linkai-advanced-guide-item"
+                    onMouseEnter={() => setActiveHoverIndex(2)}
+                    onMouseLeave={() => setActiveHoverIndex(null)}
+                  >
                     책임연구자 및 연구그룹 기반 검색
                   </div>
                 </div>
@@ -206,7 +226,9 @@ export default function WelcomePage() {
                   <div className="linkai-advanced-field-main">
                     <label className="linkai-advanced-label">연구자 소속</label>
                     <input
-                      className="linkai-advanced-input"
+                      className={`linkai-advanced-input ${
+                        activeHoverIndex === 3 ? "linkai-advanced-input--highlight" : ""
+                      }`}
                       placeholder="예: 한양대학교 ERICA, 의과대학, 전자공학과"
                     />
                   </div>
@@ -236,7 +258,11 @@ export default function WelcomePage() {
                       OR
                     </button>
                   </div>
-                  <div className="linkai-advanced-guide-item linkai-advanced-guide-item--muted">
+                  <div
+                    className="linkai-advanced-guide-item linkai-advanced-guide-item--muted"
+                    onMouseEnter={() => setActiveHoverIndex(3)}
+                    onMouseLeave={() => setActiveHoverIndex(null)}
+                  >
                     연구자 소속 정보를 함께 지정하면 조직·연구그룹 관점의 탐색
                   </div>
                 </div>
@@ -245,7 +271,9 @@ export default function WelcomePage() {
                   <div className="linkai-advanced-field-main">
                     <label className="linkai-advanced-label">출원번호 / 등록번호</label>
                     <input
-                      className="linkai-advanced-input"
+                      className={`linkai-advanced-input ${
+                        activeHoverIndex === 4 ? "linkai-advanced-input--highlight" : ""
+                      }`}
                       placeholder="예: 10-2023-0097051, 10-2024-0000776"
                     />
                   </div>
@@ -275,7 +303,11 @@ export default function WelcomePage() {
                       OR
                     </button>
                   </div>
-                  <div className="linkai-advanced-guide-item">
+                  <div
+                    className="linkai-advanced-guide-item"
+                    onMouseEnter={() => setActiveHoverIndex(4)}
+                    onMouseLeave={() => setActiveHoverIndex(null)}
+                  >
                     출원번호/등록번호 기반 검색
                   </div>
                 </div>
